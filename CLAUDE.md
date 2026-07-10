@@ -41,6 +41,10 @@ Real providers: set `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (see `.env.example`),
 - **Keep the mock provider working and offline** — tests and CI must pass with no API key.
 - Line length 100; ruff (`E,F,I`) is the linter. Run `make lint` before committing.
 - Add a test in `tests/` for new stage logic.
+- **Commits follow [Conventional Commits](https://www.conventionalcommits.org)** (`feat:`, `fix:`,
+  `docs:`, `chore:`…). Releases are automated by release-please: merging a `feat:`/`fix:` opens a
+  release PR that bumps the version (`pyproject.toml` + `wine_geo/__init__.py`), updates
+  `CHANGELOG.md`, and tags a semver release. Don't bump the version by hand.
 
 ## Gotchas
 
