@@ -19,7 +19,9 @@ def test_alias_maps_to_canonical():
 
 def test_curly_apostrophe_normalized():
     # canonical has a straight apostrophe; text has a curly one
-    assert "Stag's Leap Wine Cellars" in extract_mentions("Stag’s Leap Wine Cellars rocks", PATTERNS)
+    assert "Stag's Leap Wine Cellars" in extract_mentions(
+        "Stag’s Leap Wine Cellars rocks", PATTERNS
+    )
 
 
 def test_accented_alias():

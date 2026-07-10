@@ -14,7 +14,7 @@ anthropic = ["anthropic>=0.40"]
 openai = ["openai>=1.40"]
 dagster = ["dagster>=1.7", "dagster-webserver>=1.7"]
 viz = ["matplotlib>=3.6"]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "pytest-cov>=4", "ruff>=0.5"]
 
 [project.scripts]
 wine-geo = "wine_geo.cli:main"
@@ -31,3 +31,13 @@ pythonpath = ["."]
 [tool.dagster]
 module_name = "wine_geo.definitions"
 code_location_name = "wine_geo"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.coverage.run]
+source = ["wine_geo"]

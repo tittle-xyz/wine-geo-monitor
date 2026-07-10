@@ -81,7 +81,9 @@ _MOCK_TEMPLATES = [
 ]
 
 
-def _weighted_sample(rng: random.Random, items: list[str], weights: list[float], k: int) -> list[str]:
+def _weighted_sample(
+    rng: random.Random, items: list[str], weights: list[float], k: int
+) -> list[str]:
     """Weighted sample WITHOUT replacement (random.sample doesn't do weights)."""
     items = list(items)
     weights = list(weights)

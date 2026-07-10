@@ -7,4 +7,6 @@ venv/
 .ruff_cache/
 *.json.out
 out/
+.env
+.coverage
 .DS_Store

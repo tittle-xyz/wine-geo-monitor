@@ -67,7 +67,9 @@ def mentions(context: dg.AssetExecutionContext, raw_samples: List[dict]) -> List
 
 @dg.asset(partitions_def=daily, group_name="wine_geo",
           description="Share-of-voice, confidence intervals, and run-to-run instability.")
-def metrics(context: dg.AssetExecutionContext, raw_samples: List[dict], mentions: List[dict]) -> dict:
+def metrics(
+    context: dg.AssetExecutionContext, raw_samples: List[dict], mentions: List[dict]
+) -> dict:
     producers = load_producers(PRODUCERS_PATH)
     universe = [p["name"] for p in producers]
     raw = [RawSample(**r) for r in raw_samples]

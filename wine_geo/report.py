@@ -39,6 +39,6 @@ def render_report(results: list[dict], summary: dict) -> None:
     print("\n" + "-" * 72)
     print(f"  tokens: {summary['in']:,} in / {summary['out']:,} out"
           f"   est. cost: ${summary['cost']:.4f}")
-    print(f"  (this run was cheap; multiply by brands × prompts × surfaces × daily "
-          f"to see the real bill)")
+    print("  (this run was cheap; multiply by brands × prompts × surfaces × daily "
+          "to see the real bill)")
     print("-" * 72)
