@@ -18,3 +18,14 @@ jobs:
         run: ruff check .
       - name: Test
         run: pytest --cov=wine_geo --cov-report=term-missing
+
+  readiness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history for git-based signals
+      - name: Gate ramp-up readiness (toaster-ready)
+        uses: tittle-xyz/toaster-ready@v0
+        with:
+          min: 70

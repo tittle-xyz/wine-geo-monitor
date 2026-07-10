@@ -38,6 +38,9 @@ how many ranking differences are inside the noise floor.*
 - **Stats over point estimates.** Share-of-voice comes with a 95% CI and a
   run-to-run Jaccard, so you can see when two brands' apparent ranking gap is
   inside the noise floor.
+- **CI gates on agent-readiness.** The pipeline runs
+  [`toaster-ready`](https://github.com/tittle-xyz/toaster-ready) (`toaster gate`) to
+  keep the repo easy for a human — or an agent — to ramp up on.
 
 ## It's a pipeline, not a script
 
