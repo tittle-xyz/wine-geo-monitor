@@ -81,3 +81,53 @@ def render_chart(producer_rows, producers_meta, out_path, *, prompt_id,
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return str(out_path)
+
+
+def render_cost_curve(points, out_path, *, provider=None, model=None):
+    """Plot the cost of confidence: run cost (x) vs the 95% CI half-width (y).
+
+    One series, so the title names it — no legend. The point is the shape: cost
+    climbs ~linearly with samples while precision improves ~1/√n, so the curve dives
+    then flattens — you pay a lot for the last bit of confidence.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import FuncFormatter
+
+    pts = sorted(points, key=lambda p: p["n"])
+    xs = [p["cost"] for p in pts]
+    ys = [p["ci_half_width"] * 100 for p in pts]
+
+    fig, ax = plt.subplots(figsize=(9, 5.2))
+    ax.plot(xs, ys, "-o", color="#0072B2", linewidth=2, markersize=7,
+            markerfacecolor="#0072B2", markeredgecolor="white", markeredgewidth=1.2,
+            zorder=3)
+
+    for p, x, y in zip(pts, xs, ys):
+        ax.annotate(f"n={p['n']}", (x, y), textcoords="offset points", xytext=(7, 8),
+                    fontsize=9, color="#555555")
+
+    ax.set_xlabel("Run cost (USD, list price)", fontsize=9)
+    ax.set_ylabel("95% CI half-width (pts) — lower is more precise", fontsize=9)
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"${v:,.4f}"))
+
+    ax.set_title("The cost of confidence", fontsize=13, fontweight="bold", loc="left", pad=26)
+    who = " / ".join(x for x in (provider, model) if x)
+    sub = "cost grows ~linearly with samples; precision improves only ~1/√n"
+    ax.text(0.0, 1.02, f"{who}   ·   {sub}" if who else sub,
+            transform=ax.transAxes, fontsize=9, color="#666666")
+
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    ax.tick_params(length=0)
+    ax.grid(True, color="#EAEAEA", zorder=0)
+    ax.set_axisbelow(True)
+    ax.set_ylim(0, max(ys) * 1.18 if ys else 1)
+
+    fig.tight_layout()
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return str(out_path)

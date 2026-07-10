@@ -12,8 +12,16 @@ from pathlib import Path
 
 from . import config
 from .extract import build_patterns, load_producers
-from .pipeline import aggregate_stage, collect, extract_stage, metrics_rows
-from .providers import estimate_cost, get_provider
+from .pipeline import (
+    aggregate_stage,
+    collect,
+    cost_rows,
+    cost_stage,
+    extract_stage,
+    metrics_rows,
+    sweep_cost_confidence,
+)
+from .providers import get_provider
 from .report import render_report
 from .schema import write_jsonl
 
@@ -31,6 +39,9 @@ def _parse_args(argv):
     p.add_argument("--out-dir", help="also write raw.jsonl / mentions.jsonl / metrics.jsonl here")
     p.add_argument("--chart", help="render a share-of-voice PNG to this path (needs the viz extra)")
     p.add_argument("--chart-prompt", default="p0", help="which prompt to chart (default p0)")
+    p.add_argument("--cost-curve", help="render the cost-vs-confidence curve PNG to this path")
+    p.add_argument("--cost-curve-ns", default="10,25,50,100,200",
+                   help="comma-separated sample sizes for --cost-curve")
     return p.parse_args(argv)
 
 
@@ -56,13 +67,14 @@ def main(argv=None):
     mentions = extract_stage(raw, patterns)
     results = aggregate_stage(raw, mentions, universe, seed=args.seed)
 
+    cost = cost_stage(raw)
     summary = {
         "provider": args.provider,
         "model": args.model,
         "samples": len(raw),
-        "in": sum(r.input_tokens for r in raw),
-        "out": sum(r.output_tokens for r in raw),
-        "cost": sum(estimate_cost(r.input_tokens, r.output_tokens, r.model) for r in raw),
+        "in": cost["total"]["input_tokens"],
+        "out": cost["total"]["output_tokens"],
+        "cost": cost["total"]["cost"],
     }
     render_report(results, summary)
 
@@ -72,7 +84,8 @@ def main(argv=None):
         write_jsonl(out / "raw.jsonl", raw)
         write_jsonl(out / "mentions.jsonl", mentions)
         write_jsonl(out / "metrics.jsonl", metrics_rows(results))
-        print(f"\nwrote raw / mentions / metrics under {out}/")
+        write_jsonl(out / "cost.jsonl", cost_rows(cost))
+        print(f"\nwrote raw / mentions / metrics / cost under {out}/")
 
     if args.chart:
         from .viz import render_chart
@@ -81,6 +94,15 @@ def main(argv=None):
                             prompt_id=chosen["prompt_id"], prompt_text=chosen["prompt"],
                             jaccard=chosen["jaccard"], n=chosen["n"])
         print(f"wrote chart {path}")
+
+    if args.cost_curve:
+        from .viz import render_cost_curve
+        ns = [int(x) for x in args.cost_curve_ns.split(",") if x.strip()]
+        points = sweep_cost_confidence(prompts, patterns, universe,
+                                       provider_name=args.provider, model=args.model, ns=ns,
+                                       concurrency=args.concurrency, seed=args.seed)
+        path = render_cost_curve(points, args.cost_curve, provider=args.provider, model=args.model)
+        print(f"wrote cost curve {path}")
     return 0
 
 
