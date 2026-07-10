@@ -12,8 +12,15 @@ from pathlib import Path
 
 from . import config
 from .extract import build_patterns, load_producers
-from .pipeline import aggregate_stage, collect, extract_stage, metrics_rows
-from .providers import estimate_cost, get_provider
+from .pipeline import (
+    aggregate_stage,
+    collect,
+    cost_rows,
+    cost_stage,
+    extract_stage,
+    metrics_rows,
+)
+from .providers import get_provider
 from .report import render_report
 from .schema import write_jsonl
 
@@ -56,13 +63,14 @@ def main(argv=None):
     mentions = extract_stage(raw, patterns)
     results = aggregate_stage(raw, mentions, universe, seed=args.seed)
 
+    cost = cost_stage(raw)
     summary = {
         "provider": args.provider,
         "model": args.model,
         "samples": len(raw),
-        "in": sum(r.input_tokens for r in raw),
-        "out": sum(r.output_tokens for r in raw),
-        "cost": sum(estimate_cost(r.input_tokens, r.output_tokens, r.model) for r in raw),
+        "in": cost["total"]["input_tokens"],
+        "out": cost["total"]["output_tokens"],
+        "cost": cost["total"]["cost"],
     }
     render_report(results, summary)
 
@@ -72,7 +80,8 @@ def main(argv=None):
         write_jsonl(out / "raw.jsonl", raw)
         write_jsonl(out / "mentions.jsonl", mentions)
         write_jsonl(out / "metrics.jsonl", metrics_rows(results))
-        print(f"\nwrote raw / mentions / metrics under {out}/")
+        write_jsonl(out / "cost.jsonl", cost_rows(cost))
+        print(f"\nwrote raw / mentions / metrics / cost under {out}/")
 
     if args.chart:
         from .viz import render_chart
