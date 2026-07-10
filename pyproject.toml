@@ -13,6 +13,7 @@ dependencies = []  # core runs on the stdlib; real providers are optional extras
 anthropic = ["anthropic>=0.40"]
 openai = ["openai>=1.40"]
 dagster = ["dagster>=1.7", "dagster-webserver>=1.7"]
+viz = ["matplotlib>=3.6"]
 dev = ["pytest>=8"]
 
 [project.scripts]

@@ -9,10 +9,17 @@ again? This tool samples an LLM many times per question, measures each producer'
 the measurement is** (a bootstrap confidence interval) and **how unstable it is
 run-to-run** (mean pairwise Jaccard overlap of the recommended set).
 
-It's a companion to [`wine-research`](../wine-research): that tool points *me* at
-the models to source wine; this one measures *what the models say* about wine
-brands. Wine is the example because I can judge whether the recommendations are
+It's a companion to a separate `wine-research` agent: that tool points *me* at the
+models to source wine; this one measures *what the models say* about wine brands. Wine is the example because I can judge whether the recommendations are
 any good (WSET Level 2) — the ground-truth check a GEO score ultimately needs.
+
+![Share of voice for a wine-shopping prompt](docs/share_of_voice.png)
+
+*Ask the model for "best value Napa Cabernet under $40" fifty times and count who
+gets named: the famous marketing brands (blue) dominate, while the négociant
+hidden-label wines that are arguably the actual value play (orange accent) sit at
+the bottom. Whiskers are 95% confidence intervals — note how many overlap, i.e.
+how many ranking differences are inside the noise floor.*
 
 ## Why it's built this way
 
@@ -56,8 +63,10 @@ Dagster assets are both thin wrappers over it.
 # no dependencies, no API key — runs the three stages in-process and reports:
 python -m wine_geo --provider mock --n 30 --seed 42
 
-# also write the three-layer artifacts to disk:
-python -m wine_geo --provider mock --n 30 --seed 42 --out-dir out/
+# also write the three-layer artifacts to disk, and a chart:
+pip install -e ".[viz]"
+python -m wine_geo --provider mock --n 30 --seed 42 --out-dir out/ \
+    --chart out/chart.png --chart-prompt p0
 
 # against a real model (needs the extra + an API key):
 pip install -e ".[anthropic]"
@@ -67,16 +76,18 @@ python -m wine_geo --provider anthropic --model claude-haiku-4-5 --n 20
 
 ## Run it as a Dagster DAG
 
-The same three stages, wrapped as a scheduled asset graph
-(`raw_samples → mentions → metrics`, plus a daily schedule) in
-`wine_geo/definitions.py` — a partitionable, backfillable monitoring pipeline,
-which is the real shape of GEO measurement (≥7–8 samples/day over rolling windows).
+The same stages, wrapped as a **daily-partitioned** asset graph
+(`raw_samples → mentions → metrics → share_of_voice_chart`) with a daily schedule,
+in `wine_geo/definitions.py`. Each day is its own immutable slice you can backfill
+and re-run independently — the real shape of GEO measurement (≥7–8 samples/day,
+aggregated over a rolling multi-week window). `metrics` renders a share table right
+in the Dagster UI, and `share_of_voice_chart` emits the PNG per partition.
 
 ```bash
-pip install -e ".[dagster]"
-dagster dev                    # UI at localhost:3000 — Materialize the assets
-# or headless:
-dagster asset materialize -m wine_geo.definitions --select "*"
+pip install -e ".[dagster,viz]"
+dagster dev                    # UI at localhost:3000 — materialize / backfill
+# or headless, one day:
+dagster asset materialize -m wine_geo.definitions --select "*" --partition 2026-07-05
 ```
 
 ## Tests
@@ -100,7 +111,8 @@ surface — which is exactly the visibility gap a GEO product sells against.
 |---|---|
 | `wine_geo/pipeline.py` | the three stages as plain functions (collect / extract / aggregate) |
 | `wine_geo/schema.py` | data contracts (`RawSample`, `Mention`) + JSONL I/O |
-| `wine_geo/definitions.py` | Dagster assets, job, and daily schedule |
+| `wine_geo/definitions.py` | Dagster assets (daily-partitioned), job, and schedule |
+| `wine_geo/viz.py` | share-of-voice chart (matplotlib, Okabe-Ito palette) |
 | `wine_geo/providers.py` | `Provider` interface + mock / Anthropic / OpenAI, pricing table |
 | `wine_geo/runner.py` | concurrent sampling, rate limit, retry/backoff |
 | `wine_geo/extract.py` | producer mention detection (alias matching) |

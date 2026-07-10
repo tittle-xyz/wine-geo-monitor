@@ -29,6 +29,8 @@ def _parse_args(argv):
     p.add_argument("--prompts", help="path to a text file, one prompt per line")
     p.add_argument("--seed", type=int, help="reproducible runs (omit for real variance)")
     p.add_argument("--out-dir", help="also write raw.jsonl / mentions.jsonl / metrics.jsonl here")
+    p.add_argument("--chart", help="render a share-of-voice PNG to this path (needs the viz extra)")
+    p.add_argument("--chart-prompt", default="p0", help="which prompt to chart (default p0)")
     return p.parse_args(argv)
 
 
@@ -71,6 +73,14 @@ def main(argv=None):
         write_jsonl(out / "mentions.jsonl", mentions)
         write_jsonl(out / "metrics.jsonl", metrics_rows(results))
         print(f"\nwrote raw / mentions / metrics under {out}/")
+
+    if args.chart:
+        from .viz import render_chart
+        chosen = next((r for r in results if r["prompt_id"] == args.chart_prompt), results[0])
+        path = render_chart(metrics_rows(results), producers, args.chart,
+                            prompt_id=chosen["prompt_id"], prompt_text=chosen["prompt"],
+                            jaccard=chosen["jaccard"], n=chosen["n"])
+        print(f"wrote chart {path}")
     return 0
 
 
