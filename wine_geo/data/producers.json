@@ -1,0 +1,18 @@
+[
+  { "name": "Caymus", "aliases": ["Caymus Vineyards"], "note": "big marketing-driven Napa brand" },
+  { "name": "Silver Oak", "aliases": ["Silver Oak Cellars"] },
+  { "name": "Duckhorn", "aliases": ["Duckhorn Vineyards"] },
+  { "name": "Decoy", "aliases": [], "note": "Duckhorn's value label" },
+  { "name": "Stag's Leap Wine Cellars", "aliases": ["Stags Leap", "Stag's Leap"] },
+  { "name": "Ridge", "aliases": ["Ridge Vineyards"] },
+  { "name": "Frog's Leap", "aliases": ["Frogs Leap"] },
+  { "name": "Bogle", "aliases": ["Bogle Vineyards"], "note": "value" },
+  { "name": "Josh Cellars", "aliases": ["Josh"], "note": "value / mass-market" },
+  { "name": "Meiomi", "aliases": [] },
+  { "name": "Justin", "aliases": ["Justin Vineyards"] },
+  { "name": "Charles Krug", "aliases": [] },
+  { "name": "Chateau Montelena", "aliases": ["Château Montelena"] },
+  { "name": "Heitz", "aliases": ["Heitz Cellar"] },
+  { "name": "De Negoce", "aliases": ["DeNegoce", "De Négoce"], "note": "négociant hidden-label" },
+  { "name": "The Negociant Wine Company", "aliases": ["Cam X", "CAM X", "Cameron Hughes"], "note": "négociant hidden-label" }
+]

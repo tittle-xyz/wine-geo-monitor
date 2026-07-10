@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wine-geo-monitor"
+version = "0.1.0"
+description = "A tiny Generative Engine Optimization monitor for wine brands."
+requires-python = ">=3.9"
+dependencies = []  # core runs on the stdlib; real providers are optional extras
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.40"]
+openai = ["openai>=1.40"]
+dagster = ["dagster>=1.7", "dagster-webserver>=1.7"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+wine-geo = "wine_geo.cli:main"
+
+[tool.setuptools]
+packages = ["wine_geo"]
+
+[tool.setuptools.package-data]
+wine_geo = ["data/*.json"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.dagster]
+module_name = "wine_geo.definitions"
+code_location_name = "wine_geo"
