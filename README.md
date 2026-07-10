@@ -1,6 +1,6 @@
 # wine-geo-monitor
 
-[![ci](https://github.com/DrewTittle/wine-geo-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/DrewTittle/wine-geo-monitor/actions/workflows/ci.yml)
+[![ci](https://github.com/tittle-xyz/wine-geo-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/tittle-xyz/wine-geo-monitor/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 A tiny **Generative Engine Optimization (GEO)** monitor, pointed at wine.
