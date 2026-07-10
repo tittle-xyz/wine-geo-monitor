@@ -2,7 +2,9 @@
 
 from pytest import approx
 
-from wine_geo.pipeline import cost_rows, cost_stage
+from wine_geo import config
+from wine_geo.extract import build_patterns, load_producers
+from wine_geo.pipeline import cost_rows, cost_stage, sweep_cost_confidence
 from wine_geo.schema import RawSample
 
 
@@ -72,3 +74,23 @@ def test_cost_rows_shape_and_per_sample():
     assert row["samples"] == 2
     assert row["cost"] == approx(0.012)
     assert row["cost_per_sample"] == approx(0.006)
+
+
+def test_sweep_cost_rises_and_ci_tightens():
+    producers = load_producers(config.PRODUCERS_PATH)
+    patterns = build_patterns(producers)
+    universe = [p["name"] for p in producers]
+
+    points = sweep_cost_confidence(
+        config.DEFAULT_PROMPTS[:1], patterns, universe,
+        provider_name="mock", model="claude-haiku-4-5",
+        ns=[10, 50, 200], concurrency=4, seed=7, prompt_id="p0",
+    )
+
+    assert [p["n"] for p in points] == [10, 50, 200]
+    # Cost grows with sample count...
+    costs = [p["cost"] for p in points]
+    assert costs[0] < costs[1] < costs[2]
+    # ...while the confidence interval tightens (more samples -> more precise).
+    widths = [p["ci_half_width"] for p in points]
+    assert widths[-1] < widths[0]

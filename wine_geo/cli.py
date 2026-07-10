@@ -19,6 +19,7 @@ from .pipeline import (
     cost_stage,
     extract_stage,
     metrics_rows,
+    sweep_cost_confidence,
 )
 from .providers import get_provider
 from .report import render_report
@@ -38,6 +39,9 @@ def _parse_args(argv):
     p.add_argument("--out-dir", help="also write raw.jsonl / mentions.jsonl / metrics.jsonl here")
     p.add_argument("--chart", help="render a share-of-voice PNG to this path (needs the viz extra)")
     p.add_argument("--chart-prompt", default="p0", help="which prompt to chart (default p0)")
+    p.add_argument("--cost-curve", help="render the cost-vs-confidence curve PNG to this path")
+    p.add_argument("--cost-curve-ns", default="10,25,50,100,200",
+                   help="comma-separated sample sizes for --cost-curve")
     return p.parse_args(argv)
 
 
@@ -90,6 +94,15 @@ def main(argv=None):
                             prompt_id=chosen["prompt_id"], prompt_text=chosen["prompt"],
                             jaccard=chosen["jaccard"], n=chosen["n"])
         print(f"wrote chart {path}")
+
+    if args.cost_curve:
+        from .viz import render_cost_curve
+        ns = [int(x) for x in args.cost_curve_ns.split(",") if x.strip()]
+        points = sweep_cost_confidence(prompts, patterns, universe,
+                                       provider_name=args.provider, model=args.model, ns=ns,
+                                       concurrency=args.concurrency, seed=args.seed)
+        path = render_cost_curve(points, args.cost_curve, provider=args.provider, model=args.model)
+        print(f"wrote cost curve {path}")
     return 0
 
 

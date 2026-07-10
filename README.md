@@ -83,11 +83,12 @@ python -m wine_geo --provider anthropic --model claude-haiku-4-5 --n 20
 ## Run it as a Dagster DAG
 
 The same stages, wrapped as a **daily-partitioned** asset graph
-(`raw_samples → mentions → metrics → share_of_voice_chart`) with a daily schedule,
-in `wine_geo/definitions.py`. Each day is its own immutable slice you can backfill
-and re-run independently — the real shape of GEO measurement (≥7–8 samples/day,
-aggregated over a rolling multi-week window). `metrics` renders a share table right
-in the Dagster UI, and `share_of_voice_chart` emits the PNG per partition.
+(`raw_samples → mentions → metrics → share_of_voice_chart`, plus a `cost` asset off
+`raw_samples`) with a daily schedule, in `wine_geo/definitions.py`. Each day is its
+own immutable slice you can backfill and re-run independently — the real shape of
+GEO measurement (≥7–8 samples/day, aggregated over a rolling multi-week window).
+`metrics` renders a share table right in the Dagster UI, `cost` reports the day's
+token spend, and `share_of_voice_chart` emits the PNG per partition.
 
 ```bash
 pip install -e ".[dagster,viz]"
@@ -111,14 +112,32 @@ reproduces (and real models tend to confirm): AI shopping answers **cluster on a
 handful of famous, marketing-heavy brands**, and value / négociant labels barely
 surface — which is exactly the visibility gap a GEO product sells against.
 
+## The cost of confidence
+
+Because every answer is a fresh sample, the honest question isn't *"what's the
+share of voice"* — it's *"how many samples do I need to trust the number, and what
+does that cost?"* The `cost` stage turns the token counts already on each
+`RawSample` into spend, and a sweep across sample sizes makes the trade-off
+visible:
+
+![The cost of confidence — 95% CI half-width vs. run cost](docs/cost_of_confidence.png)
+
+On the mock run above, going from **10 → 200 samples per prompt** tightens the 95%
+CI from ±22 pts to ±5 pts — **~4.5× more precise for ~20× the cost.** That's not a
+surprise, it's the √n law: spend grows linearly with samples while precision
+improves only as 1/√n (√20 ≈ 4.5). So there's a sweet spot, and past it you pay a
+lot for a little confidence — exactly the lever a monitoring product tunes to
+protect its margins. Regenerate it with `make cost-curve`; the same numbers land as
+a daily-partitioned `cost` asset in the Dagster DAG.
+
 ## Layout
 
 | File | Role |
 |---|---|
-| `wine_geo/pipeline.py` | the three stages as plain functions (collect / extract / aggregate) |
+| `wine_geo/pipeline.py` | the stages as plain functions (collect / extract / aggregate / cost) |
 | `wine_geo/schema.py` | data contracts (`RawSample`, `Mention`) + JSONL I/O |
 | `wine_geo/definitions.py` | Dagster assets (daily-partitioned), job, and schedule |
-| `wine_geo/viz.py` | share-of-voice chart (matplotlib, Okabe-Ito palette) |
+| `wine_geo/viz.py` | share-of-voice chart + cost-of-confidence curve (matplotlib, Okabe-Ito palette) |
 | `wine_geo/providers.py` | `Provider` interface + mock / Anthropic / OpenAI, pricing table |
 | `wine_geo/runner.py` | concurrent sampling, rate limit, retry/backoff |
 | `wine_geo/extract.py` | producer mention detection (alias matching) |

@@ -15,6 +15,7 @@ Pipeline stages are plain functions in `wine_geo/pipeline.py`:
 - **collect** → raw samples (`wine_geo/runner.py` + `wine_geo/providers.py`)
 - **extract** → mentions (`wine_geo/extract.py`)
 - **aggregate** → metrics (`wine_geo/stats.py`)
+- **cost** → token spend, a pure function of the raw layer (`cost_stage` in `pipeline.py`)
 
 Data contracts: `wine_geo/schema.py` (`RawSample`, `Mention`). Terminal report:
 `report.py`. Chart: `viz.py`. Dagster wrapper (thin): `wine_geo/definitions.py`.
@@ -29,7 +30,8 @@ assets are thin wrappers over `pipeline.py`. Don't put logic in `definitions.py`
 - `make run` — run the monitor with the mock provider (no API key)
 - `make test` — pytest with coverage
 - `make lint` — ruff
-- `make chart` — render the example chart
+- `make chart` — render the example share-of-voice chart
+- `make cost-curve` — render the cost-of-confidence curve (`docs/cost_of_confidence.png`)
 
 Real providers: set `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (see `.env.example`), then
 `python -m wine_geo --provider anthropic --model claude-haiku-4-5`.

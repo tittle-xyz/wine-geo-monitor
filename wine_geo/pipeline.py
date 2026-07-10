@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from .extract import extract_mentions
-from .providers import estimate_cost
+from .providers import estimate_cost, get_provider
 from .runner import sample_prompt
 from .schema import Mention, RawSample
 from .stats import bootstrap_ci, mean_pairwise_jaccard, share_of_voice
@@ -134,6 +134,35 @@ def cost_stage(raw):
         "by_model": sorted(by_model.values(), key=lambda d: d["cost"], reverse=True),
         "by_prompt": sorted(by_prompt.values(), key=lambda d: d["prompt_id"]),
     }
+
+
+def sweep_cost_confidence(prompts, patterns, universe, *, provider_name, model, ns,
+                          concurrency, seed, prompt_id="p0"):
+    """Run the whole pipeline at a range of sample sizes and report cost vs. precision.
+
+    Returns one point per n: run cost (from `cost_stage`) and the mean 95% CI
+    half-width across mentioned producers for `prompt_id`. Deterministic given a
+    seed. This is the data behind the "cost of confidence" chart — it makes the
+    core token-economics trade-off (linear cost, ~1/√n precision) measurable.
+    """
+    points = []
+    for n in ns:
+        provider = get_provider(provider_name, seed=seed)
+        raw = collect(prompts, provider=provider, model=model, n=n,
+                      concurrency=concurrency, seed=seed)
+        mentions = extract_stage(raw, patterns)
+        results = aggregate_stage(raw, mentions, universe, seed=seed)
+        agg = next((r for r in results if r["prompt_id"] == prompt_id), results[0])
+        halves = [(hi - lo) / 2 for lo, hi in agg["ci"].values()]
+        mean_half = sum(halves) / len(halves) if halves else 0.0
+        cost = cost_stage(raw)
+        points.append({
+            "n": n,
+            "samples": cost["total"]["samples"],
+            "cost": cost["total"]["cost"],
+            "ci_half_width": mean_half,
+        })
+    return points
 
 
 def cost_rows(cost):

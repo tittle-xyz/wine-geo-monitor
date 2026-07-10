@@ -1,7 +1,8 @@
 """Dagster wrapper: the GEO monitor as a scheduled, DAILY-PARTITIONED asset DAG.
 
     raw_samples ─► mentions ─► metrics ─► share_of_voice_chart
-         └───────────────────►┘   (metrics needs the full sample set for its denominators)
+         │              └──────►┘   (metrics needs the full sample set for its denominators)
+         └─► cost                    (token spend is a pure function of the raw layer)
 
 Every asset is partitioned by day, so each date is its own immutable slice you can
 backfill and re-run independently — the real shape of GEO measurement, where you
@@ -23,7 +24,7 @@ import dagster as dg
 
 from .config import DEFAULT_CONCURRENCY, DEFAULT_MODEL, DEFAULT_N, DEFAULT_PROMPTS, PRODUCERS_PATH
 from .extract import build_patterns, load_producers
-from .pipeline import aggregate_stage, collect, extract_stage, metrics_rows
+from .pipeline import aggregate_stage, collect, cost_stage, extract_stage, metrics_rows
 from .providers import get_provider
 from .schema import Mention, RawSample
 
@@ -95,6 +96,24 @@ def metrics(
 
 
 @dg.asset(partitions_def=daily, group_name="wine_geo",
+          description="Token spend for the day, derived from the raw layer (list price).")
+def cost(context: dg.AssetExecutionContext, raw_samples: List[dict]) -> dict:
+    raw = [RawSample(**r) for r in raw_samples]
+    c = cost_stage(raw)
+    md = ["| provider / model | samples | in tok | out tok | cost (USD) |",
+          "|---|---:|---:|---:|---:|"]
+    for m in c["by_model"]:
+        md.append(f"| {m['provider']} / {m['model']} | {m['samples']} | "
+                  f"{m['input_tokens']:,} | {m['output_tokens']:,} | ${m['cost']:.4f} |")
+    context.add_output_metadata({
+        "total_cost_usd": round(c["total"]["cost"], 6),
+        "samples": c["total"]["samples"],
+        "by_model": dg.MetadataValue.md("\n".join(md)),
+    })
+    return c
+
+
+@dg.asset(partitions_def=daily, group_name="wine_geo",
           description="Share-of-voice chart (PNG) for the headline prompt.")
 def share_of_voice_chart(context: dg.AssetExecutionContext, metrics: dict) -> None:
     from .viz import render_chart
@@ -116,7 +135,7 @@ geo_scan_job = dg.define_asset_job("geo_scan_job", selection=dg.AssetSelection.a
 daily_schedule = dg.build_schedule_from_partitioned_job(geo_scan_job, hour_of_day=6)
 
 defs = dg.Definitions(
-    assets=[raw_samples, mentions, metrics, share_of_voice_chart],
+    assets=[raw_samples, mentions, cost, metrics, share_of_voice_chart],
     jobs=[geo_scan_job],
     schedules=[daily_schedule],
 )
