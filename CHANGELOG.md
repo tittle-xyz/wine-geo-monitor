@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.2.0...wine-geo-monitor-v0.3.0) (2026-07-13)
+
+
+### Features
+
+* auto-load a local .env for API keys ([#17](https://github.com/tittle-xyz/wine-geo-monitor/issues/17)) ([e3d94ae](https://github.com/tittle-xyz/wine-geo-monitor/commit/e3d94ae6b45af456b20388cf5a139489b9e7e5ba))
+
+
+### Documentation
+
+* add a human codebase tour (docs/TOUR.md) and link it from the README ([#16](https://github.com/tittle-xyz/wine-geo-monitor/issues/16)) ([0e2912b](https://github.com/tittle-xyz/wine-geo-monitor/commit/0e2912ba456fbf2b992facd040fa7ccee0df053d))
+
 ## [0.2.0](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.1.1...wine-geo-monitor-v0.2.0) (2026-07-10)
 
 
