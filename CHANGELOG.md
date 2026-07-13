@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.3.0...wine-geo-monitor-v0.4.0) (2026-07-13)
+
+
+### Features
+
+* rebuild the tracked producer list from real model runs ([#19](https://github.com/tittle-xyz/wine-geo-monitor/issues/19)) ([089aa67](https://github.com/tittle-xyz/wine-geo-monitor/commit/089aa6723751fde7c3a6812b143f93b51d38c94d))
+
 ## [0.3.0](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.2.0...wine-geo-monitor-v0.3.0) (2026-07-13)
 
 
