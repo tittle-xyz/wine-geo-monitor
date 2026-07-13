@@ -32,7 +32,7 @@
   { "name": "Castello di Amorosa", "aliases": [], "note": "mid-tier Napa" },
   { "name": "Robert Mondavi", "aliases": ["Mondavi", "Robert Mondavi Private Selection", "Robert Mondavi Winery"], "note": "big brand (Private Selection is the value line)" },
 
-  { "name": "De Negoce", "aliases": ["DeNegoce", "De Négoce"], "note": "négociant hidden-label (Cameron Hughes)" },
+  { "name": "De Negoce", "aliases": ["DeNegoce", "De Négoce"], "note": "négociant hidden-label (independent company)" },
   { "name": "CAM X", "aliases": ["CAMx", "CamX", "CAMX", "CAM-X", "Cam X"], "note": "négociant hidden-label (Cameron Hughes, launched 2025)" },
-  { "name": "Cameron Hughes", "aliases": ["Cameron Hughes Wine", "Cam Hughes"], "note": "négociant hidden-label (the négociant himself; also de Négoce, CAM X)" }
+  { "name": "Cameron Hughes", "aliases": ["Cameron Hughes Wine", "Cam Hughes"], "note": "négociant hidden-label (the négociant behind CAM X; formerly de Négoce, now a separate company)" }
 ]
