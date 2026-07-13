@@ -24,6 +24,9 @@ hidden-label wines that are arguably the actual value play (orange accent) sit a
 the bottom. Whiskers are 95% confidence intervals — note how many overlap, i.e.
 how many ranking differences are inside the noise floor.*
 
+> 🧭 **New to the code?** [`docs/TOUR.md`](docs/TOUR.md) walks one full run through the
+> codebase, file by file — the fastest way to get oriented.
+
 ## Why it's built this way
 
 - **Runs with no API key.** The default `mock` provider mimics a stochastic model,
