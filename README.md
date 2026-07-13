@@ -158,8 +158,10 @@ python -m wine_geo.advise --target 0.10 --from out/claude
 # → For ±10 pts: 97 samples/prompt  (~$0.81 per full run)
 ```
 
+![How many samples for a target precision](docs/sample_size.png)
+
 Worst-case (p=0.5), so the target holds for every producer; `--budget` inverts it
-(what precision a dollar figure buys).
+(what precision a dollar figure buys). Regenerate with `make advise-chart`.
 
 ## Layout
 

@@ -17,7 +17,7 @@ from . import config
 from .schema import read_jsonl
 from .stats import ci_half_width_for, recommend_sample_size
 
-_TARGETS = [0.05, 0.075, 0.10, 0.15]
+_TARGETS = [0.05, 0.08, 0.10, 0.15]
 
 
 def cost_per_sample(run_dir):
@@ -49,6 +49,7 @@ def main(argv=None):
     ap.add_argument("--cost-per-sample", type=float, help="USD per sample (if not using --from)")
     ap.add_argument("--prompts", type=int, help="number of prompts (default: from run or config)")
     ap.add_argument("--confidence", type=float, default=0.95)
+    ap.add_argument("--chart", help="render a samples-vs-precision PNG here (needs the viz extra)")
     args = ap.parse_args(argv)
 
     cps = cost_per_sample(args.from_run) if args.from_run else args.cost_per_sample
@@ -87,6 +88,11 @@ def main(argv=None):
         else:
             print(f"\n→ ${args.budget:,.2f} buys {n:,} samples/prompt "
                   f"→ about ±{ci_half_width_for(n, confidence=args.confidence) * 100:.1f} pts.")
+
+    if args.chart:
+        from .viz import render_sample_size_chart
+        path = render_sample_size_chart(args.chart, confidence=args.confidence)
+        print(f"\nwrote sample-size chart {path}")
     return 0
 
 

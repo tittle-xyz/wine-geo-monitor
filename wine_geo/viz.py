@@ -195,3 +195,50 @@ def render_cross_engine_chart(labels, producers, table, out_path, *,
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return str(out_path)
+
+
+def render_sample_size_chart(out_path, *, confidence=0.95, marks=(0.05, 0.08, 0.10, 0.15)):
+    """The planning view: samples per prompt needed for a target CI half-width.
+
+    Purely the √n relationship (worst case p=0.5), so it renders with no API run —
+    the deterministic companion to the empirical cost-of-confidence curve.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from .stats import recommend_sample_size
+
+    widths = [w / 1000 for w in range(30, 205, 5)]  # ±3.0 → ±20.0 pts
+    xs = [w * 100 for w in widths]
+    ns = [recommend_sample_size(w, confidence=confidence) for w in widths]
+
+    fig, ax = plt.subplots(figsize=(9, 5.0))
+    ax.plot(xs, ns, "-", color="#0072B2", linewidth=2, zorder=3)
+    for w in marks:
+        n = recommend_sample_size(w, confidence=confidence)
+        ax.plot(w * 100, n, "o", color="#0072B2", markersize=7,
+                markerfacecolor="#0072B2", markeredgecolor="white", markeredgewidth=1.2, zorder=4)
+        ax.annotate(f"±{w * 100:.0f} pts → {n}", (w * 100, n), textcoords="offset points",
+                    xytext=(9, 6), fontsize=9, color="#555555")
+
+    ax.set_xlabel("Target 95% CI half-width (± percentage points)", fontsize=9)
+    ax.set_ylabel("Samples per prompt needed", fontsize=9)
+    ax.set_title("How many samples for a target precision",
+                 fontsize=13, fontweight="bold", loc="left", pad=24)
+    ax.text(0.0, 1.02, "worst case (p=0.5) — tightening the target by half costs ~4× the samples",
+            transform=ax.transAxes, fontsize=9, color="#666666")
+
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    ax.tick_params(length=0)
+    ax.grid(True, color="#EAEAEA", zorder=0)
+    ax.set_axisbelow(True)
+    ax.set_ylim(bottom=0)
+
+    fig.tight_layout()
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return str(out_path)
