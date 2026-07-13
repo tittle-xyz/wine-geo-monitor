@@ -242,3 +242,62 @@ def render_sample_size_chart(out_path, *, confidence=0.95, marks=(0.05, 0.08, 0.
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return str(out_path)
+
+
+# Categorical line colors (Okabe-Ito, fixed order; yellow dropped for contrast on white).
+_TREND_COLORS = ["#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7", "#56B4E9", "#000000"]
+
+
+def render_trend_chart(dates, series, out_path, *, prompt_id=None, top=6, drift=None):
+    """Share-of-voice over time, one line per producer, drifters marked.
+
+    `dates` sorted ascending; `series[producer][date] = (share, ci_lo, ci_hi)`. Lines
+    are the top producers by peak share; a ⚠ on the end label flags producers whose
+    move cleared the noise floor (from `drift`, a set of producer names).
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    drift = drift or set()
+
+    def peak(p):
+        return max(series[p].get(d, (0.0,))[0] for d in dates)
+
+    producers = sorted((p for p in series if peak(p) > 0), key=peak, reverse=True)
+    producers = producers[:min(top, len(_TREND_COLORS))]
+    xs = list(range(len(dates)))
+
+    fig, ax = plt.subplots(figsize=(9, 5.2))
+    for i, p in enumerate(producers):
+        color = _TREND_COLORS[i % len(_TREND_COLORS)]
+        ys = [series[p].get(d, (0.0,))[0] * 100 for d in dates]
+        ax.plot(xs, ys, "-o", color=color, linewidth=2, markersize=5,
+                markerfacecolor=color, markeredgecolor="white", markeredgewidth=1, zorder=3,
+                label=f"{p} ⚠" if p in drift else p)
+
+    ax.set_xticks(xs)
+    ax.set_xticklabels([d[5:] for d in dates], fontsize=9)
+    ax.set_xlim(-0.2, len(dates) - 1 + 0.2)
+    ax.set_ylim(0, max(5, min(100, max((series[p].get(d, (0.0,))[0] * 100
+                for p in producers for d in dates), default=0) * 1.15)))
+    ax.set_ylabel("Share of voice (%)", fontsize=9)
+
+    ax.set_title("Share of voice over time", fontsize=13, fontweight="bold", loc="left", pad=24)
+    ax.text(0.0, 1.02, f"prompt {prompt_id or ''}  ·  ⚠ = moved beyond the 95% CI noise floor",
+            transform=ax.transAxes, fontsize=9, color="#666666")
+
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    ax.tick_params(length=0)
+    ax.grid(True, axis="y", color="#EAEAEA", zorder=0)
+    ax.set_axisbelow(True)
+    ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False,
+              fontsize=8.5, title="producer")
+
+    fig.tight_layout()
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return str(out_path)

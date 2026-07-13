@@ -98,6 +98,21 @@ python -m wine_geo.compare out/claude=Claude out/openai=OpenAI --prompt p0 --out
 Grouped bars, one color per model: the same producer's bars sit together, so the
 cross-engine gap reads at a glance.
 
+## Trend & drift
+
+Once you have daily partitions (each writing `<root>/<date>/metrics.jsonl`), track
+share-of-voice over time and flag *real* moves — a producer whose latest-day 95% CI no
+longer overlaps its baseline day. The point is to **not cry wolf**: most day-to-day
+wiggle is sampling noise, and only a non-overlapping move counts as drift.
+
+```bash
+python -m wine_geo.trend out/daily --prompt p0 --chart out/trend.png
+# → N of M producers moved beyond the noise floor.
+```
+
+One line per producer; a ⚠ marks a move past the noise floor. Backfill a range of
+partitions to exercise it, or let the daily schedule fill them in.
+
 ## Run it as a Dagster DAG
 
 The same stages, wrapped as a **daily-partitioned** asset graph
