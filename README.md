@@ -79,7 +79,7 @@ python -m wine_geo --provider mock --n 30 --seed 42 --out-dir out/ \
 
 # against a real model (needs the extra + an API key):
 pip install -e ".[anthropic]"
-export ANTHROPIC_API_KEY=...
+export ANTHROPIC_API_KEY=...        # or put it in a .env — the CLI auto-loads one
 python -m wine_geo --provider anthropic --model claude-haiku-4-5 --n 20
 ```
 

@@ -55,6 +55,8 @@ def _load_prompts(path):
 def main(argv=None):
     args = _parse_args(argv)
 
+    config.load_dotenv()  # pick up ANTHROPIC_API_KEY / OPENAI_API_KEY from a local .env
+
     producers = load_producers(args.producers)
     patterns = build_patterns(producers)
     universe = [p["name"] for p in producers]
