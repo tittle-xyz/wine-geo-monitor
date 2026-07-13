@@ -13,6 +13,26 @@
   { "name": "Charles Krug", "aliases": [] },
   { "name": "Chateau Montelena", "aliases": ["Château Montelena"] },
   { "name": "Heitz", "aliases": ["Heitz Cellar"] },
-  { "name": "De Negoce", "aliases": ["DeNegoce", "De Négoce"], "note": "négociant hidden-label" },
-  { "name": "The Negociant Wine Company", "aliases": ["Cam X", "CAM X", "Cameron Hughes"], "note": "négociant hidden-label" }
+
+  { "name": "Barefoot", "aliases": ["Barefoot Cellars"], "note": "value / mass-market" },
+  { "name": "Apothic", "aliases": ["Apothic Red"], "note": "value / mass-market" },
+  { "name": "Blackstone", "aliases": ["Blackstone Winery"], "note": "value" },
+  { "name": "Columbia Crest", "aliases": ["Columbia Crest H3"], "note": "value (Washington)" },
+  { "name": "14 Hands", "aliases": ["14 Hands Vineyards"], "note": "value (Washington)" },
+  { "name": "Rutherford Ranch", "aliases": [], "note": "value" },
+  { "name": "Educated Guess", "aliases": [], "note": "value" },
+  { "name": "Ravenswood", "aliases": [], "note": "value" },
+  { "name": "Franciscan", "aliases": ["Franciscan Estate"], "note": "value / mid-tier" },
+  { "name": "Rodney Strong", "aliases": [], "note": "value / mid-tier Sonoma" },
+  { "name": "Markham", "aliases": ["Markham Vineyards"], "note": "mid-tier Napa" },
+  { "name": "Rutherford Hill", "aliases": [], "note": "mid-tier Napa" },
+  { "name": "Conn Creek", "aliases": [], "note": "mid-tier Napa" },
+  { "name": "Silverado Vineyards", "aliases": [], "note": "mid-tier Napa (bare 'Silverado' omitted — collides with Silverado Trail)" },
+  { "name": "Peju", "aliases": ["Peju Province"], "note": "mid-tier Napa" },
+  { "name": "Castello di Amorosa", "aliases": [], "note": "mid-tier Napa" },
+  { "name": "Robert Mondavi", "aliases": ["Mondavi", "Robert Mondavi Private Selection", "Robert Mondavi Winery"], "note": "big brand (Private Selection is the value line)" },
+
+  { "name": "De Negoce", "aliases": ["DeNegoce", "De Négoce"], "note": "négociant hidden-label (independent company)" },
+  { "name": "CAM X", "aliases": ["CAMx", "CamX", "CAMX", "CAM-X", "Cam X"], "note": "négociant hidden-label (Cameron Hughes, launched 2025)" },
+  { "name": "Cameron Hughes", "aliases": ["Cameron Hughes Wine", "Cam Hughes"], "note": "négociant hidden-label (the négociant behind CAM X; formerly de Négoce, now a separate company)" }
 ]
