@@ -1,4 +1,4 @@
-.PHONY: install run test lint chart cost-curve clean
+.PHONY: install run test lint chart cost-curve advise-chart clean
 
 install:  ## editable install with dev + viz extras
 	pip install -e ".[dev,viz]"
@@ -17,6 +17,9 @@ chart:  ## render the example share-of-voice chart
 
 cost-curve:  ## render the cost-of-confidence curve (docs/cost_of_confidence.png)
 	python -m wine_geo --provider mock --seed 42 --cost-curve docs/cost_of_confidence.png
+
+advise-chart:  ## render the sample-size planning chart (docs/sample_size.png)
+	python -m wine_geo.advise --chart docs/sample_size.png
 
 clean:
 	rm -rf out .pytest_cache .ruff_cache .coverage
