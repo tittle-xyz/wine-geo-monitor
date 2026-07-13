@@ -131,3 +131,67 @@ def render_cost_curve(points, out_path, *, provider=None, model=None):
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return str(out_path)
+
+
+# Okabe-Ito, assigned to engines in fixed order (never cycled) — color = which model.
+_ENGINE_COLORS = ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#56B4E9"]
+
+
+def render_cross_engine_chart(labels, producers, table, out_path, *,
+                              prompt_id=None, prompt_text=None):
+    """Grouped horizontal bars: share-of-voice per producer, one bar per model.
+
+    `labels` are the models in order; `producers` are ordered ascending by max share
+    (so the leader sits on top); `table[producer][label]` is `(share, ci_lo, ci_hi)`.
+    Color encodes the model — the same producer's two bars sit together so the
+    cross-engine gap reads at a glance.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+
+    n_eng = len(labels)
+    bar_h = 0.82 / n_eng
+    ys = list(range(len(producers)))
+
+    fig, ax = plt.subplots(figsize=(9, max(3.6, 0.62 * len(producers) + 1.5)))
+    for ei, label in enumerate(labels):
+        color = _ENGINE_COLORS[ei % len(_ENGINE_COLORS)]
+        offs = [y + (ei - (n_eng - 1) / 2) * bar_h for y in ys]
+        shares = [table[p][label][0] * 100 for p in producers]
+        lo = [(table[p][label][0] - table[p][label][1]) * 100 for p in producers]
+        hi = [(table[p][label][2] - table[p][label][0]) * 100 for p in producers]
+        ax.barh(offs, shares, height=bar_h * 0.9, color=color, zorder=3,
+                xerr=[lo, hi], error_kw=dict(ecolor="#9A9A9A", elinewidth=0.9, capsize=2))
+        for y, s, h in zip(offs, shares, hi):
+            if s > 0:
+                ax.text(s + h + 1.6, y, f"{s:.0f}%", va="center", ha="left",
+                        fontsize=7.5, color="#555555")
+
+    ax.set_yticks(ys)
+    ax.set_yticklabels(producers, fontsize=9)
+    ax.set_xlabel("Share of voice — % of answers that mention the producer", fontsize=9)
+    ax.set_xlim(0, 108)
+
+    ax.set_title(f"Who each model recommends — {prompt_text or prompt_id or ''}",
+                 fontsize=13, fontweight="bold", loc="left", pad=24)
+    ax.text(0.0, 1.02, "bars = share of voice · whiskers = 95% CI · one color per model",
+            transform=ax.transAxes, fontsize=9, color="#666666")
+
+    for spine in ("top", "right", "left"):
+        ax.spines[spine].set_visible(False)
+    ax.tick_params(length=0)
+    ax.xaxis.grid(True, color="#EAEAEA", zorder=0)
+    ax.set_axisbelow(True)
+
+    handles = [Patch(color=_ENGINE_COLORS[ei % len(_ENGINE_COLORS)], label=lbl)
+               for ei, lbl in enumerate(labels)]
+    ax.legend(handles=handles, loc="lower right", frameon=False, fontsize=9, title="model")
+
+    fig.tight_layout()
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return str(out_path)

@@ -83,6 +83,21 @@ export ANTHROPIC_API_KEY=...        # or put it in a .env — the CLI auto-loads
 python -m wine_geo --provider anthropic --model claude-haiku-4-5 --n 20
 ```
 
+## Compare engines
+
+Different assistants recommend different brands, so a brand's visibility is
+*per-model*. Run the monitor against two providers, then chart them side by side —
+no new API calls, it reads the saved runs:
+
+```bash
+python -m wine_geo --provider anthropic --model claude-haiku-4-5 --out-dir out/claude
+python -m wine_geo --provider openai    --model gpt-4o-mini      --out-dir out/openai
+python -m wine_geo.compare out/claude=Claude out/openai=OpenAI --prompt p0 --out out/cross.png
+```
+
+Grouped bars, one color per model: the same producer's bars sit together, so the
+cross-engine gap reads at a glance.
+
 ## Run it as a Dagster DAG
 
 The same stages, wrapped as a **daily-partitioned** asset graph
