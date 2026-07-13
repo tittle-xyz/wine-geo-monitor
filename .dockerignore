@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+venv
+out
+.tmp_dagster_home*
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.coverage
+.env
+docs/*.png
