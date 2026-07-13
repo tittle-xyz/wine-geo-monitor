@@ -10,3 +10,4 @@ out/
 .env
 .coverage
 .DS_Store
+.tmp_dagster_home*
