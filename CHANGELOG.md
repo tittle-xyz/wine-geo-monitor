@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.0](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.4.0...wine-geo-monitor-v0.5.0) (2026-07-13)
+
+
+### Features
+
+* cost-aware sample-size advisor ([#24](https://github.com/tittle-xyz/wine-geo-monitor/issues/24)) ([05a24e3](https://github.com/tittle-xyz/wine-geo-monitor/commit/05a24e306bfe53917ed88b03aae684878645c6db))
+* cross-engine share-of-voice comparison chart ([#21](https://github.com/tittle-xyz/wine-geo-monitor/issues/21)) ([493b6c8](https://github.com/tittle-xyz/wine-geo-monitor/commit/493b6c84cc58d43509bfa2495689cc20c5c5169f))
+* share-of-voice trend & drift detection over daily partitions ([#26](https://github.com/tittle-xyz/wine-geo-monitor/issues/26)) ([e154883](https://github.com/tittle-xyz/wine-geo-monitor/commit/e154883cc5a795fc3c946cfc2816b2617d1a8adf))
+
 ## [0.4.0](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.3.0...wine-geo-monitor-v0.4.0) (2026-07-13)
 
 
