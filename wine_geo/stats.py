@@ -9,8 +9,37 @@ brands' CIs overlap, their apparent ranking difference is inside the noise floor
 
 from __future__ import annotations
 
+import math
 import random
+import statistics
 from itertools import combinations
+
+
+def _z(confidence: float) -> float:
+    """Two-sided z for a confidence level (1.96 at 0.95)."""
+    return statistics.NormalDist().inv_cdf(1 - (1 - confidence) / 2)
+
+
+def recommend_sample_size(target_half_width: float, *, confidence: float = 0.95,
+                          p: float = 0.5) -> int:
+    """Samples per prompt so a proportion's CI half-width is <= `target_half_width`.
+
+    Normal approximation: half-width ≈ z·sqrt(p(1-p)/n). Defaults to the worst case
+    `p=0.5` (the widest interval), so the target holds for *every* producer. Fractions
+    throughout: `target_half_width=0.1` means ±10 percentage points. The √n law made
+    actionable — halving the interval costs 4× the samples.
+    """
+    if not 0 < target_half_width < 1:
+        raise ValueError("target_half_width must be in (0, 1)")
+    return math.ceil((_z(confidence) / target_half_width) ** 2 * p * (1 - p))
+
+
+def ci_half_width_for(n: int, *, confidence: float = 0.95, p: float = 0.5) -> float:
+    """The CI half-width `n` samples buys (worst case `p=0.5`) — inverse of
+    `recommend_sample_size`, for seeing what a fixed sample budget gets you."""
+    if n <= 0:
+        return float("inf")
+    return _z(confidence) * math.sqrt(p * (1 - p) / n)
 
 
 def share_of_voice(
