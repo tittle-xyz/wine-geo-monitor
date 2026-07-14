@@ -87,7 +87,7 @@ calls — and any metric is auditable back to what the model actually said.
 |---|---|
 | `pipeline.py` | the stages as plain functions — **start here; it's the table of contents** |
 | `schema.py` | the two data shapes (`RawSample`, `Mention`) + JSONL I/O |
-| `providers.py` | `Provider` interface + mock / Anthropic / OpenAI + the pricing table |
+| `providers.py` | `Provider` interface + mock / Anthropic / OpenAI / local Ollama + the pricing table |
 | `runner.py` | concurrent sampling, rate limiting, retry/backoff |
 | `extract.py` | producer mention detection (alias matching) |
 | `stats.py` | share-of-voice, bootstrap CI, pairwise Jaccard |

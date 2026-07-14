@@ -33,7 +33,9 @@ how many ranking differences are inside the noise floor.*
   so `pytest` and a full run work offline. Real `anthropic` / `openai` providers
   sit behind the same `Provider` interface — a working miniature of the
   multi-provider abstraction layer a GEO monitor needs to survive one vendor
-  repricing or retiring a model.
+  repricing or retiring a model. An `ollama` provider runs a **real local model**
+  through that same seam: key-free and free-of-charge, but genuinely stochastic
+  output — a middle ground between the canned mock and a paid API.
 - **Treats every call as paid, rate-limited, and flaky.** The runner caps
   concurrency and retries with exponential backoff + jitter, and tracks token cost
   per run — because at real scale (brands × prompts × samples × surfaces × daily),
@@ -81,6 +83,10 @@ python -m wine_geo --provider mock --n 30 --seed 42 --out-dir out/ \
 pip install -e ".[anthropic]"
 export ANTHROPIC_API_KEY=...        # or put it in a .env — the CLI auto-loads one
 python -m wine_geo --provider anthropic --model claude-haiku-4-5 --n 20
+
+# against a real model running locally — no key, no cost, no cloud (needs Ollama):
+#   brew install ollama && ollama serve && ollama pull llama3.1:8b
+python -m wine_geo --provider ollama --model llama3.1:8b --n 20
 ```
 
 ## Compare engines
@@ -233,7 +239,7 @@ Knowing *when a cost lever doesn't apply* is half of using one well.
 | `wine_geo/schema.py` | data contracts (`RawSample`, `Mention`) + JSONL I/O |
 | `wine_geo/definitions.py` | Dagster assets (daily-partitioned), job, and schedule |
 | `wine_geo/viz.py` | share-of-voice chart + cost-of-confidence curve (matplotlib, Okabe-Ito palette) |
-| `wine_geo/providers.py` | `Provider` interface + mock / Anthropic / OpenAI, sync + batch paths, pricing table |
+| `wine_geo/providers.py` | `Provider` interface + mock / Anthropic / OpenAI / local Ollama, sync + batch paths, pricing table |
 | `wine_geo/sla.py` | operation SLA → fulfillment mechanism (sync vs. batch API) |
 | `wine_geo/runner.py` | concurrent sampling, rate limit, retry/backoff |
 | `wine_geo/extract.py` | producer mention detection (alias matching) |
