@@ -27,6 +27,7 @@ class RawSample:
     response_text: str
     input_tokens: int
     output_tokens: int
+    billing_tier: str = "standard"  # "batch" when fulfilled via a batch API (~50% off)
     error: str | None = None
 
 

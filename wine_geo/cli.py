@@ -33,6 +33,9 @@ def _parse_args(argv):
     p.add_argument("--model", default=config.DEFAULT_MODEL)
     p.add_argument("--n", type=int, default=config.DEFAULT_N, help="samples per prompt")
     p.add_argument("--concurrency", type=int, default=config.DEFAULT_CONCURRENCY)
+    p.add_argument("--sla", default="real-time", choices=["real-time", "same-day", "overnight"],
+                   help="operation SLA; same-day/overnight use the batch API "
+                        "(~50%% cheaper, hours not seconds). Default real-time.")
     p.add_argument("--producers", default=str(config.PRODUCERS_PATH))
     p.add_argument("--prompts", help="path to a text file, one prompt per line")
     p.add_argument("--seed", type=int, help="reproducible runs (omit for real variance)")
@@ -65,7 +68,8 @@ def main(argv=None):
 
     # The three stages, exactly as the Dagster assets run them.
     raw = collect(prompts, provider=provider, model=args.model, n=args.n,
-                  concurrency=args.concurrency, seed=args.seed)
+                  concurrency=args.concurrency, seed=args.seed, sla=args.sla,
+                  log=lambda m: print(m, file=sys.stderr))
     mentions = extract_stage(raw, patterns)
     results = aggregate_stage(raw, mentions, universe, seed=args.seed)
 

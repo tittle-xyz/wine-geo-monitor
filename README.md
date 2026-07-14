@@ -178,6 +178,35 @@ python -m wine_geo.advise --target 0.10 --from out/claude
 Worst-case (p=0.5), so the target holds for every producer; `--budget` inverts it
 (what precision a dollar figure buys). Regenerate with `make advise-chart`.
 
+## Latency for cost: the batch path
+
+Scheduled monitoring is the textbook batch workload — a day's scan just has to be
+done by morning, not in seconds. Both the Anthropic and OpenAI **batch APIs bill at
+half list price** in exchange for a multi-hour window, so that's a discount this
+collector should take by default when it runs unattended.
+
+Rather than a bare `--batch` toggle, the collector takes an **operation SLA** and
+lets the provider layer pick the mechanism:
+
+```bash
+python -m wine_geo --provider openai --model gpt-4o-mini --n 25 --sla real-time  # sync, seconds
+python -m wine_geo --provider openai --model gpt-4o-mini --n 25 --sla overnight  # batch API, ~50% off
+```
+
+- `real-time` samples synchronously (a person is waiting).
+- `same-day` / `overnight` submit the whole scan as **one batch job**, poll, and map
+  the results back — same `RawSample` output, just tagged `billing_tier="batch"` so
+  the `cost` stage prices it at the batch rate (charts show realized spend, not list
+  price). A provider with no batch API transparently falls back to synchronous.
+
+The seam is [`wine_geo/sla.py`](wine_geo/sla.py): the collector never knows *how* its
+samples are fulfilled, so a finer mechanism later — a flex tier, a cheaper model, a
+cache — slots in without touching a line upstream. The durable raw layer + daily
+partitions already make collection latency-tolerant, which is why `overnight` is the
+natural default for the scheduled job. Because batch buys the same tokens for half
+the money, it's also the honest way to afford a *larger* `n` — tighter confidence
+intervals at the same bill (see [the cost of confidence](#the-cost-of-confidence)).
+
 ## Layout
 
 | File | Role |
@@ -186,7 +215,8 @@ Worst-case (p=0.5), so the target holds for every producer; `--budget` inverts i
 | `wine_geo/schema.py` | data contracts (`RawSample`, `Mention`) + JSONL I/O |
 | `wine_geo/definitions.py` | Dagster assets (daily-partitioned), job, and schedule |
 | `wine_geo/viz.py` | share-of-voice chart + cost-of-confidence curve (matplotlib, Okabe-Ito palette) |
-| `wine_geo/providers.py` | `Provider` interface + mock / Anthropic / OpenAI, pricing table |
+| `wine_geo/providers.py` | `Provider` interface + mock / Anthropic / OpenAI, sync + batch paths, pricing table |
+| `wine_geo/sla.py` | operation SLA → fulfillment mechanism (sync vs. batch API) |
 | `wine_geo/runner.py` | concurrent sampling, rate limit, retry/backoff |
 | `wine_geo/extract.py` | producer mention detection (alias matching) |
 | `wine_geo/stats.py` | share-of-voice, bootstrap CI, pairwise Jaccard |

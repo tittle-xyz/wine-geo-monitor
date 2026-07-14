@@ -41,6 +41,7 @@ class SamplingConfig(dg.Config):
     concurrency: int = DEFAULT_CONCURRENCY
     seed: Optional[int] = 42  # keep None in prod for real variance
     prompts: Optional[List[str]] = None
+    sla: str = "real-time"  # "overnight" routes collection through the batch API (~50% off)
 
 
 @dg.asset(partitions_def=daily, group_name="wine_geo",
@@ -51,7 +52,7 @@ def raw_samples(context: dg.AssetExecutionContext, config: SamplingConfig) -> Li
     prompts = config.prompts or DEFAULT_PROMPTS
     samples = collect(prompts, provider=provider, model=config.model, n=config.n,
                       concurrency=config.concurrency, seed=config.seed,
-                      run_id=f"scan-{day}", ts=day)
+                      run_id=f"scan-{day}", ts=day, sla=config.sla, log=context.log.info)
     context.add_output_metadata({"date": day, "prompts": len(prompts), "samples": len(samples)})
     return [asdict(s) for s in samples]
 
