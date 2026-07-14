@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.5.0...wine-geo-monitor-v0.5.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* make seeded runs reproducible under concurrency (closes [#35](https://github.com/tittle-xyz/wine-geo-monitor/issues/35)) ([#36](https://github.com/tittle-xyz/wine-geo-monitor/issues/36)) ([671ab19](https://github.com/tittle-xyz/wine-geo-monitor/commit/671ab19f905b8ac5ad967c7dc2a84fe76c123183))
+
 ## [0.5.0](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.4.0...wine-geo-monitor-v0.5.0) (2026-07-13)
 
 
