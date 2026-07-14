@@ -25,6 +25,19 @@ class Completion:
     output_tokens: int
 
 
+@dataclass
+class BatchRequest:
+    """One prompt to fulfill via a provider's batch API, tagged with a custom_id.
+
+    The custom_id is how a batch result maps back to its request (results come back
+    unordered). Keep it to `^[a-zA-Z0-9_-]{1,64}$` — Anthropic enforces that shape.
+    """
+
+    custom_id: str
+    prompt: str
+    model: str
+
+
 # (input, output) USD per 1,000,000 tokens. Rough public list prices — they drift,
 # which is exactly why cost tracking belongs in the tool, not a spreadsheet.
 PRICING: dict[str, tuple[float, float]] = {
@@ -36,11 +49,25 @@ PRICING: dict[str, tuple[float, float]] = {
     "mock": (0.0, 0.0),
 }
 
+# Both the Anthropic Message Batches API and the OpenAI Batch API bill at half list
+# price. That's the whole trade #9 is about: latency for cost.
+BATCH_DISCOUNT = 0.5
 
-def estimate_cost(input_tokens: int, output_tokens: int, model: str) -> float:
-    """USD for one call. Unknown models cost 0 rather than crashing a long run."""
+# Answers come back in ~400 tokens; keep sync and batch paths on the same ceiling.
+MAX_TOKENS = 400
+
+
+def estimate_cost(
+    input_tokens: int, output_tokens: int, model: str, *, batch: bool = False
+) -> float:
+    """USD for one call. Unknown models cost 0 rather than crashing a long run.
+
+    `batch=True` applies the batch-API discount, so the cost pipeline reflects what a
+    batched run actually costs, not list price.
+    """
     price_in, price_out = PRICING.get(model, (0.0, 0.0))
-    return (input_tokens * price_in + output_tokens * price_out) / 1_000_000
+    cost = (input_tokens * price_in + output_tokens * price_out) / 1_000_000
+    return cost * BATCH_DISCOUNT if batch else cost
 
 
 @runtime_checkable
@@ -48,6 +75,25 @@ class Provider(Protocol):
     name: str
 
     def complete(self, prompt: str, *, model: str) -> Completion: ...
+
+
+# Batch is an *optional* capability: a provider advertises it with `supports_batch =
+# True` and a `complete_batch`. The collector checks the flag and falls back to the
+# synchronous path when it's absent, so a new provider needs only `complete` to work.
+class BatchProvider(Protocol):
+    name: str
+    supports_batch: bool
+
+    def complete_batch(
+        self, requests: list[BatchRequest], *, poll_interval: float, timeout: float, log=None
+    ) -> dict[str, Completion]:
+        """Submit all requests as one job, block until done, return {custom_id: Completion}.
+
+        Only successful results are returned; the caller treats any missing custom_id
+        as a failed sample. Raises TimeoutError / RuntimeError on a batch that never
+        finishes or ends in a terminal error state.
+        """
+        ...
 
 
 # --- Mock -----------------------------------------------------------------
@@ -109,9 +155,20 @@ class MockProvider:
     """
 
     name = "mock"
+    supports_batch = True
 
     def __init__(self, seed: int | None = None):
         self._rng = random.Random(seed)
+
+    def complete_batch(self, requests, *, poll_interval=0.0, timeout=0.0, log=None):
+        """Offline batch: fulfill each request in order, no network, no waiting.
+
+        Exercises the whole batch code path (custom_id round-trip, result mapping,
+        the batch billing tier) in CI with no API key.
+        """
+        if log:
+            log(f"mock batch: fulfilling {len(requests)} requests offline")
+        return {r.custom_id: self.complete(r.prompt, model=r.model) for r in requests}
 
     def complete(self, prompt: str, *, model: str) -> Completion:
         names = list(_MOCK_WEIGHTS)
@@ -136,6 +193,7 @@ class MockProvider:
 
 class AnthropicProvider:
     name = "anthropic"
+    supports_batch = True
 
     def __init__(self) -> None:
         try:
@@ -151,7 +209,7 @@ class AnthropicProvider:
         # monitor exists to measure, so we want it, not a turned-up temperature.
         resp = self._client.messages.create(
             model=model,
-            max_tokens=400,
+            max_tokens=MAX_TOKENS,
             messages=[{"role": "user", "content": prompt}],
         )
         text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
@@ -162,9 +220,66 @@ class AnthropicProvider:
             output_tokens=resp.usage.output_tokens,
         )
 
+    def complete_batch(  # pragma: no cover - env dependent
+        self, requests, *, poll_interval=15.0, timeout=21600.0, log=None
+    ):
+        """Message Batches API: submit all prompts as one job (~50% off), poll, retrieve.
+
+        Most batches finish in well under an hour; the daily monitoring job is tiny.
+        Only succeeded results come back — the collector marks any missing custom_id
+        as an errored sample.
+        """
+        import time
+
+        req_model = {r.custom_id: r.model for r in requests}
+        batch = self._client.messages.batches.create(
+            requests=[
+                {
+                    "custom_id": r.custom_id,
+                    "params": {
+                        "model": r.model,
+                        "max_tokens": MAX_TOKENS,
+                        "messages": [{"role": "user", "content": r.prompt}],
+                    },
+                }
+                for r in requests
+            ]
+        )
+        deadline = time.monotonic() + timeout
+        while True:
+            current = self._client.messages.batches.retrieve(batch.id)
+            if current.processing_status == "ended":
+                break
+            if time.monotonic() > deadline:
+                raise TimeoutError(
+                    f"Anthropic batch {batch.id} still {current.processing_status} "
+                    f"after {timeout:.0f}s"
+                )
+            if log:
+                counts = getattr(current, "request_counts", "")
+                log(f"anthropic batch {batch.id}: {current.processing_status} {counts}")
+            time.sleep(poll_interval)
+
+        out: dict[str, Completion] = {}
+        for result in self._client.messages.batches.results(batch.id):
+            if result.result.type != "succeeded":
+                if log:
+                    log(f"anthropic batch {result.custom_id}: {result.result.type}")
+                continue
+            msg = result.result.message
+            text = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+            out[result.custom_id] = Completion(
+                text=text,
+                model=req_model.get(result.custom_id, msg.model),
+                input_tokens=msg.usage.input_tokens,
+                output_tokens=msg.usage.output_tokens,
+            )
+        return out
+
 
 class OpenAIProvider:
     name = "openai"
+    supports_batch = True
 
     def __init__(self) -> None:
         try:
@@ -176,7 +291,7 @@ class OpenAIProvider:
     def complete(self, prompt: str, *, model: str) -> Completion:
         resp = self._client.chat.completions.create(
             model=model,
-            max_tokens=400,
+            max_tokens=MAX_TOKENS,
             messages=[{"role": "user", "content": prompt}],
         )
         text = resp.choices[0].message.content or ""
@@ -187,6 +302,76 @@ class OpenAIProvider:
             input_tokens=usage.prompt_tokens,
             output_tokens=usage.completion_tokens,
         )
+
+    def complete_batch(  # pragma: no cover - env dependent
+        self, requests, *, poll_interval=15.0, timeout=21600.0, log=None
+    ):
+        """Batch API: upload a JSONL of chat requests, create the batch (~50% off), poll, download.
+
+        Only succeeded rows come back; the collector marks any missing custom_id as an
+        errored sample.
+        """
+        import io
+        import json
+        import time
+
+        req_model = {r.custom_id: r.model for r in requests}
+        payload = "\n".join(
+            json.dumps({
+                "custom_id": r.custom_id,
+                "method": "POST",
+                "url": "/v1/chat/completions",
+                "body": {
+                    "model": r.model,
+                    "max_tokens": MAX_TOKENS,
+                    "messages": [{"role": "user", "content": r.prompt}],
+                },
+            })
+            for r in requests
+        )
+        upload = self._client.files.create(
+            file=("batch.jsonl", io.BytesIO(payload.encode("utf-8"))), purpose="batch"
+        )
+        batch = self._client.batches.create(
+            input_file_id=upload.id, endpoint="/v1/chat/completions", completion_window="24h"
+        )
+        deadline = time.monotonic() + timeout
+        while True:
+            current = self._client.batches.retrieve(batch.id)
+            if current.status == "completed":
+                break
+            if current.status in ("failed", "expired", "cancelled", "cancelling"):
+                raise RuntimeError(f"OpenAI batch {batch.id} ended in status {current.status}")
+            if time.monotonic() > deadline:
+                raise TimeoutError(
+                    f"OpenAI batch {batch.id} still {current.status} after {timeout:.0f}s"
+                )
+            if log:
+                counts = getattr(current, "request_counts", "")
+                log(f"openai batch {batch.id}: {current.status} {counts}")
+            time.sleep(poll_interval)
+
+        out: dict[str, Completion] = {}
+        body_text = self._client.files.content(current.output_file_id).text
+        for line in body_text.splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            cid = row.get("custom_id")
+            resp = row.get("response") or {}
+            body = resp.get("body") or {}
+            if resp.get("status_code") != 200 or not body.get("choices"):
+                if log:
+                    log(f"openai batch {cid}: status {resp.get('status_code')}")
+                continue
+            usage = body.get("usage") or {}
+            out[cid] = Completion(
+                text=body["choices"][0]["message"].get("content") or "",
+                model=req_model.get(cid, ""),
+                input_tokens=usage.get("prompt_tokens", 0),
+                output_tokens=usage.get("completion_tokens", 0),
+            )
+        return out
 
 
 def get_provider(name: str, *, seed: int | None = None) -> Provider:

@@ -17,16 +17,33 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from .extract import extract_mentions
-from .providers import estimate_cost, get_provider
+from .providers import BatchRequest, estimate_cost, get_provider
 from .runner import sample_prompt
 from .schema import Mention, RawSample
+from .sla import Mechanism, Sla, mechanism_for
 from .stats import bootstrap_ci, mean_pairwise_jaccard, share_of_voice
 
 
-def collect(prompts, *, provider, model, n, concurrency, seed=None, run_id=None, ts=None):
-    """Dumb collector: sample each prompt n times, capture raw responses. No interpretation."""
+def collect(prompts, *, provider, model, n, concurrency, seed=None, run_id=None, ts=None,
+            sla=Sla.REALTIME, log=None):
+    """Dumb collector: sample each prompt n times, capture raw responses. No interpretation.
+
+    `sla` picks the fulfillment mechanism (see wine_geo.sla): `real-time` samples
+    synchronously; `same-day`/`overnight` use the provider's batch API (~50% cheaper)
+    when it advertises one, falling back to synchronous collection otherwise. Either
+    way the output is the same `RawSample` records, so nothing downstream changes —
+    only their `billing_tier`.
+    """
     run_id = run_id or uuid4().hex[:12]
     ts = ts or datetime.now(timezone.utc).isoformat()
+
+    if mechanism_for(sla) is Mechanism.BATCH:
+        if getattr(provider, "supports_batch", False):
+            return _collect_batch(prompts, provider=provider, model=model, n=n,
+                                  run_id=run_id, ts=ts, log=log)
+        if log:
+            log(f"provider {provider.name!r} has no batch path; collecting synchronously")
+
     samples: list[RawSample] = []
     for i, prompt in enumerate(prompts):
         completions = asyncio.run(
@@ -47,6 +64,50 @@ def collect(prompts, *, provider, model, n, concurrency, seed=None, run_id=None,
                     output_tokens=c.output_tokens,
                 )
             )
+    return samples
+
+
+def _collect_batch(prompts, *, provider, model, n, run_id, ts, log=None):
+    """Batch path: submit every (prompt x sample) as one job, map results back to RawSamples.
+
+    One batch for the whole scan is the efficient shape — a single submit/poll cycle
+    covers all prompts. Results carry `billing_tier="batch"` so the cost pipeline
+    prices them at the batch rate. Any custom_id missing from the results (an errored
+    or expired request) becomes an errored, zero-cost sample rather than a gap.
+    """
+    requests: list[BatchRequest] = []
+    index: dict[str, tuple[str, str, int]] = {}
+    for i, prompt in enumerate(prompts):
+        for j in range(n):
+            cid = f"p{i}-{j}"  # ^[a-zA-Z0-9_-]{1,64}$ — Anthropic's custom_id rule
+            requests.append(BatchRequest(custom_id=cid, prompt=prompt, model=model))
+            index[cid] = (f"p{i}", prompt, j)
+
+    if log:
+        log(f"submitting {len(requests)} requests to the {provider.name} batch API "
+            f"({len(prompts)} prompts x {n} samples)")
+    completions = provider.complete_batch(requests, log=log)
+
+    samples: list[RawSample] = []
+    for cid, (pid, ptext, j) in index.items():
+        c = completions.get(cid)
+        samples.append(
+            RawSample(
+                run_id=run_id,
+                ts=ts,
+                provider=provider.name,
+                model=model,
+                prompt_id=pid,
+                prompt_text=ptext,
+                sample_index=j,
+                response_text=c.text if c else "",
+                input_tokens=c.input_tokens if c else 0,
+                output_tokens=c.output_tokens if c else 0,
+                billing_tier="batch",
+                error=None if c else "no result returned for this batch request",
+            )
+        )
+    samples.sort(key=lambda s: (s.prompt_id, s.sample_index))
     return samples
 
 
@@ -110,20 +171,23 @@ def cost_stage(raw):
     (provider, model) and by prompt — the structured input the cost charts and the
     Dagster `cost` asset consume (see #7).
 
-    NOTE (WIP): list-price only for now. Batch (#9) and cache-read (#12) discounts
-    land once those paths capture the tokens they save.
+    Batch (#9) discounts are live: a sample's `billing_tier` decides whether it's
+    priced at list or batch rate, so charts reflect what a batched run actually cost.
+    Cache-read (#12) discounts land once that path captures the tokens it saves.
     """
     def _bucket(**extra):
         return {**extra, "samples": 0, "input_tokens": 0, "output_tokens": 0, "cost": 0.0}
 
     total = _bucket()
-    by_model: dict[tuple[str, str], dict] = {}
+    by_model: dict[tuple[str, str, str], dict] = {}
     by_prompt: dict[str, dict] = {}
     for r in raw:
-        cost = estimate_cost(r.input_tokens, r.output_tokens, r.model)
+        tier = getattr(r, "billing_tier", "standard")
+        cost = estimate_cost(r.input_tokens, r.output_tokens, r.model, batch=(tier == "batch"))
         _accumulate(total, r, cost)
         model_bucket = by_model.setdefault(
-            (r.provider, r.model), _bucket(provider=r.provider, model=r.model)
+            (r.provider, r.model, tier),
+            _bucket(provider=r.provider, model=r.model, billing_tier=tier),
         )
         _accumulate(model_bucket, r, cost)
         prompt_bucket = by_prompt.setdefault(r.prompt_id, _bucket(prompt_id=r.prompt_id))
@@ -173,6 +237,7 @@ def cost_rows(cost):
         rows.append({
             "provider": m["provider"],
             "model": m["model"],
+            "billing_tier": m.get("billing_tier", "standard"),
             "samples": m["samples"],
             "input_tokens": m["input_tokens"],
             "output_tokens": m["output_tokens"],
