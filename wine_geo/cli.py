@@ -28,8 +28,10 @@ from .schema import write_jsonl
 
 def _parse_args(argv):
     p = argparse.ArgumentParser(prog="wine_geo", description="A tiny GEO monitor for wine brands.")
-    p.add_argument("--provider", default="mock", choices=["mock", "anthropic", "openai"],
-                   help="mock needs no API key (default)")
+    p.add_argument("--provider", default="mock",
+                   choices=["mock", "anthropic", "openai", "ollama"],
+                   help="mock needs no API key (default); ollama runs a local model, "
+                        "also key-free (e.g. --provider ollama --model llama3.1:8b)")
     p.add_argument("--model", default=config.DEFAULT_MODEL)
     p.add_argument("--n", type=int, default=config.DEFAULT_N, help="samples per prompt")
     p.add_argument("--concurrency", type=int, default=config.DEFAULT_CONCURRENCY)

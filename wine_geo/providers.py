@@ -374,6 +374,60 @@ class OpenAIProvider:
         return out
 
 
+class OllamaProvider:
+    """A real model running locally via Ollama — no API key, no network, no cost.
+
+    Sits between `mock` and the paid providers: the mock is deterministic canned
+    text, the paid providers cost money and need keys, and this is an actual LLM
+    you can run offline for free. Handy for developing against real (stochastic)
+    output without spending anything, and a clean demonstration that the Provider
+    seam doesn't care whether the model is remote or on your laptop.
+
+    Talks to Ollama's native HTTP endpoint with the standard library only, so it
+    adds no dependency — in keeping with the stdlib-only core (ADR-0003). Point it
+    at a non-default host with OLLAMA_HOST. There's no batch API: local generation
+    has no batch discount to chase, so the collector falls back to the sync path.
+    """
+
+    name = "ollama"
+
+    def __init__(self) -> None:
+        import os
+
+        self._host = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+
+    def complete(self, prompt: str, *, model: str) -> Completion:
+        import json
+        import urllib.error
+        import urllib.request
+
+        body = json.dumps({
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "options": {"num_predict": MAX_TOKENS},
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self._host}/api/chat", data=body, headers={"Content-Type": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = json.loads(resp.read())
+        except urllib.error.URLError as e:  # pragma: no cover - env dependent
+            raise RuntimeError(
+                f"Ollama request to {self._host} failed ({e}). Is `ollama serve` running "
+                f"and is the model pulled (`ollama pull {model}`)?"
+            ) from e
+
+        # Ollama reports real token counts; cost stays $0 since it's not in PRICING.
+        return Completion(
+            text=data.get("message", {}).get("content", ""),
+            model=model,
+            input_tokens=data.get("prompt_eval_count", 0),
+            output_tokens=data.get("eval_count", 0),
+        )
+
+
 def get_provider(name: str, *, seed: int | None = None) -> Provider:
     if name == "mock":
         return MockProvider(seed=seed)
@@ -381,4 +435,6 @@ def get_provider(name: str, *, seed: int | None = None) -> Provider:
         return AnthropicProvider()
     if name == "openai":
         return OpenAIProvider()
-    raise ValueError(f"unknown provider {name!r} (choose: mock, anthropic, openai)")
+    if name == "ollama":
+        return OllamaProvider()
+    raise ValueError(f"unknown provider {name!r} (choose: mock, anthropic, openai, ollama)")
