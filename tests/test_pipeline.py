@@ -10,9 +10,9 @@ PRODUCERS = [
 UNIVERSE = [p["name"] for p in PRODUCERS]
 
 
-def _collect(seed=1, n=20):
+def _collect(seed=1, n=20, concurrency=4):
     return collect(["best napa cab?"], provider=MockProvider(seed=seed),
-                   model="claude-haiku-4-5", n=n, concurrency=4, seed=seed)
+                   model="claude-haiku-4-5", n=n, concurrency=concurrency, seed=seed)
 
 
 def test_collector_produces_raw_records():
@@ -23,10 +23,35 @@ def test_collector_produces_raw_records():
     assert sorted(r.sample_index for r in raw) == list(range(20))
 
 
-def test_collector_is_deterministic_with_seed():
-    a = [r.response_text for r in _collect(seed=1)]
-    b = [r.response_text for r in _collect(seed=1)]
+def test_collector_samples_the_same_distribution_for_a_seed():
+    """A seed reproduces the *bag* of responses, not the per-index assignment.
+
+    collect() samples concurrently, so which task wins which RNG draws is
+    scheduling-dependent — asserting list equality passes on 3.9/3.11 by GIL luck and
+    fails on 3.13. The bag is what the mock actually guarantees.
+    """
+    a = sorted(r.response_text for r in _collect(seed=1))
+    b = sorted(r.response_text for r in _collect(seed=1))
     assert a == b
+
+
+def test_collector_is_byte_identical_at_concurrency_1():
+    # With no concurrency there's no interleaving, so even per-index order is stable.
+    a = [r.response_text for r in _collect(seed=1, concurrency=1)]
+    b = [r.response_text for r in _collect(seed=1, concurrency=1)]
+    assert a == b
+
+
+def test_metrics_are_reproducible_for_a_seed():
+    # The point of the fix: even though per-index order may differ under concurrency,
+    # the derived share-of-voice is a function of the bag, so it's stable for a seed.
+    def sov(seed):
+        raw = _collect(seed=seed, n=30)
+        mentions = extract_stage(raw, build_patterns(PRODUCERS))
+        r = aggregate_stage(raw, mentions, UNIVERSE, seed=7)[0]
+        return {name: hits for name, (_, hits, _) in r["sov"].items()}
+
+    assert sov(3) == sov(3)
 
 
 def test_extract_only_returns_universe_producers():
