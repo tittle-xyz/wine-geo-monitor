@@ -207,6 +207,24 @@ natural default for the scheduled job. Because batch buys the same tokens for ha
 the money, it's also the honest way to afford a *larger* `n` — tighter confidence
 intervals at the same bill (see [the cost of confidence](#the-cost-of-confidence)).
 
+### The lever that *doesn't* apply yet: prompt caching
+
+The obvious next token lever is **prompt caching** — repeated input at ~0.1× the
+normal rate (Anthropic) or auto-cached at ~50% off (OpenAI). Sampling one prompt N
+times with identical text looks like the perfect fit. It isn't, yet, for one reason:
+the **minimum cacheable prefix**. Caching only engages on a shared prefix at or above
+a per-model floor — **1,024 tokens** (Sonnet 5 / Opus 4.8), **4,096** (Haiku 4.5) —
+and below it nothing caches, silently. wine-geo's prompts are one-line questions,
+**~15–30 tokens** — 50–250× too short. Wiring up `cache_control` here would be
+cargo-culting a discount that can't turn on.
+
+Caching becomes a real lever only once there's a large (≥1K–4K-token) shared prefix
+reused across calls — a substantial system preamble, or (the natural one) the
+brand-definition context of the structured-extraction path on the roadmap below. So
+it's tracked in [#12](https://github.com/tittle-xyz/wine-geo-monitor/issues/12) and
+deliberately deferred until that prefix exists, rather than shipped as a no-op.
+Knowing *when a cost lever doesn't apply* is half of using one well.
+
 ## Layout
 
 | File | Role |
