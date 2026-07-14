@@ -13,6 +13,7 @@ same seam.
 from __future__ import annotations
 
 import random
+import threading
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
@@ -148,10 +149,17 @@ def _weighted_sample(
 
 
 class MockProvider:
-    """Deterministic-with-a-seed stand-in that mimics a stochastic model.
+    """Seeded stand-in that mimics a stochastic model.
 
-    Stamps the requested model onto each Completion so cost tracking shows real
-    numbers even in mock mode (default model is a cheap tier).
+    **What a seed reproduces:** the sampled *distribution* — and therefore every metric
+    derived from it (share-of-voice, confidence intervals, Jaccard), exactly. Stamps the
+    requested model onto each Completion so cost tracking shows real numbers even in mock
+    mode (default model is a cheap tier).
+
+    **What it does not:** which `sample_index` gets which response. `collect()` samples
+    concurrently, so the order threads take their draws is scheduling-dependent — the
+    *bag* of responses is stable, its order isn't. Pass `concurrency=1` for byte-identical
+    raw output.
     """
 
     name = "mock"
@@ -159,6 +167,7 @@ class MockProvider:
 
     def __init__(self, seed: int | None = None):
         self._rng = random.Random(seed)
+        self._lock = threading.Lock()
 
     def complete_batch(self, requests, *, poll_interval=0.0, timeout=0.0, log=None):
         """Offline batch: fulfill each request in order, no network, no waiting.
@@ -173,12 +182,19 @@ class MockProvider:
     def complete(self, prompt: str, *, model: str) -> Completion:
         names = list(_MOCK_WEIGHTS)
         weights = list(_MOCK_WEIGHTS.values())
-        k = self._rng.choice([2, 3, 3, 4])
-        picks = _weighted_sample(self._rng, names, weights, k)
+        # One call = one contiguous block of the RNG sequence. runner.py samples via
+        # asyncio.to_thread, so complete() runs on several worker threads sharing this
+        # generator; holding the lock across every draw keeps a call's draws contiguous,
+        # which is what makes the sampled distribution reproducible for a seed. Without it
+        # that holds only because the GIL rarely switches inside these short calls — luck,
+        # not a guarantee, and 3.13's scheduling breaks it.
+        with self._lock:
+            k = self._rng.choice([2, 3, 3, 4])
+            picks = _weighted_sample(self._rng, names, weights, k)
+            template = self._rng.choice(_MOCK_TEMPLATES)
         # Pad the template if we drew fewer than 3.
         while len(picks) < 3:
             picks.append(picks[-1])
-        template = self._rng.choice(_MOCK_TEMPLATES)
         text = template.format(a=picks[0], b=picks[1], c=picks[2])
         return Completion(
             text=text,

@@ -61,6 +61,12 @@ def bootstrap_ci(
     n = len(outcomes)
     if n == 0:
         return (0.0, 0.0)
+    # Canonicalize before resampling. A proportion's empirical distribution is fully
+    # described by k/n, so row order is statistically irrelevant — but `outcomes[randrange]`
+    # reads it, so a fixed seed would otherwise return a different interval for the same data
+    # in a different order. Sorting makes the CI a function of (k, n, seed), which is what
+    # re-derivability from the raw layer requires (ADR-0002).
+    outcomes = sorted(outcomes)
     rng = random.Random(seed)
     means = sorted(
         sum(outcomes[rng.randrange(n)] for _ in range(n)) / n for _ in range(iters)
@@ -78,8 +84,12 @@ def mean_pairwise_jaccard(sets: list[set[str]]) -> float:
     pairs = list(combinations(range(len(sets)), 2))
     if not pairs:
         return 1.0
-    total = 0.0
+    scores = []
     for i, j in pairs:
         union = sets[i] | sets[j]
-        total += 1.0 if not union else len(sets[i] & sets[j]) / len(union)
-    return total / len(pairs)
+        scores.append(1.0 if not union else len(sets[i] & sets[j]) / len(union))
+    # fsum, not sum: reordering `sets` yields the same multiset of pairwise scores but adds
+    # them in a different order, and `+=` rounds at each step — enough to shift the last bit
+    # and make two identical runs compare unequal. fsum rounds once, off the exact total, so
+    # the result depends only on the multiset. (Also just more accurate.)
+    return math.fsum(scores) / len(pairs)
