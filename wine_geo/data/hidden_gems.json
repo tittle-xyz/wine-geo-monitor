@@ -1,0 +1,12 @@
+[
+  {"name": "De Negoce", "aliases": ["De Négoce", "DeNegoce"], "note": "négociant hidden-label; value + some high scores"},
+  {"name": "CAM X", "aliases": ["Cameron Hughes"], "note": "négociant hidden-label (Cameron Hughes)"},
+  {"name": "Corison", "aliases": ["Corison Winery"], "note": "critically adored Napa Cabernet, low household fame"},
+  {"name": "Dunn Vineyards", "aliases": ["Dunn", "Dunn Howell Mountain"], "note": "Howell Mountain cult Cab, low fame"},
+  {"name": "Mayacamas", "aliases": ["Mayacamas Vineyards"], "note": "historic mountain Cabernet, critic favorite"},
+  {"name": "Smith-Madrone", "aliases": ["Smith Madrone"], "note": "Spring Mountain, highly rated, small production"},
+  {"name": "Arnot-Roberts", "aliases": ["Arnot Roberts"], "note": "cult small-production, critically acclaimed"},
+  {"name": "Realm Cellars", "aliases": [], "note": "high-scoring cult Napa; bare 'Realm' omitted (common word)"},
+  {"name": "Bevan Cellars", "aliases": ["Bevan"], "note": "high-scoring cult Napa, low household fame"},
+  {"name": "Myriad Cellars", "aliases": [], "note": "high-scoring cult Napa; bare 'Myriad' omitted (common word)"}
+]

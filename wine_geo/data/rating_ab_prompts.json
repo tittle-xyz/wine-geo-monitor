@@ -1,0 +1,22 @@
+[
+  {
+    "base": "Recommend a good Napa Cabernet for around $30.",
+    "primed": "Recommend a good highly-rated 90+ point Napa Cabernet for around $30."
+  },
+  {
+    "base": "What are the best value Napa Valley Cabernet Sauvignons under $40?",
+    "primed": "What are the best critically-acclaimed (90+ points) Napa Valley Cabernet Sauvignons under $40?"
+  },
+  {
+    "base": "What's a good introduction to Napa Cabernet without spending a lot?",
+    "primed": "What's a good highly-rated introduction to Napa Cabernet without spending a lot?"
+  },
+  {
+    "base": "I like Caymus but want something cheaper in a similar style — what should I buy?",
+    "primed": "I like Caymus but want a cheaper, highly-rated (90+ point) wine in a similar style — what should I buy?"
+  },
+  {
+    "base": "Best Sonoma Cabernet under $35?",
+    "primed": "Best 90+ point Sonoma Cabernet under $35?"
+  }
+]

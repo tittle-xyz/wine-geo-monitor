@@ -1,0 +1,11 @@
+[
+  {"name": "Wine Spectator", "aliases": ["WS"], "note": "100-pt scores; the shelf-talker standard"},
+  {"name": "Wine Advocate", "aliases": ["The Wine Advocate", "Robert Parker's Wine Advocate"], "note": "Parker-founded; 100-pt scores"},
+  {"name": "Robert Parker", "aliases": [], "note": "critic/brand behind the 100-pt scale"},
+  {"name": "James Suckling", "aliases": ["Suckling"], "note": "100-pt scores"},
+  {"name": "Decanter", "aliases": ["Decanter World Wine Awards", "DWWA"], "note": "UK publication; medals + 100-pt"},
+  {"name": "Vinous", "aliases": ["Antonio Galloni"], "note": "Galloni's publication"},
+  {"name": "Jancis Robinson", "aliases": ["Jancis"], "note": "20-pt scale; UK critic"},
+  {"name": "Wine Enthusiast", "aliases": [], "note": "100-pt scores; also a retailer brand"},
+  {"name": "Wine & Spirits", "aliases": ["Wine and Spirits"], "note": "US publication"}
+]

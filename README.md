@@ -104,6 +104,34 @@ python -m wine_geo.compare out/claude=Claude out/openai=OpenAI --prompt p0 --out
 Grouped bars, one color per model: the same producer's bars sit together, so the
 cross-engine gap reads at a glance.
 
+## Do ratings move the model? (an A/B)
+
+Critic scores are a major wine-marketing spend — so does asking for *highly-rated*
+wines change what the model recommends? Matched prompt pairs (same request, one
+plain and one primed with "90+ points"; they live in
+`data/rating_ab_prompts.json`) run through the pipeline per model and get compared.
+The design sidesteps the fame confound: we *explicitly* ask for highly-rated wines,
+so if the recommendation set moves no more than the model's own run-to-run noise,
+ratings aren't steering it.
+
+![Ratings A/B — recommendations barely move while rating-talk explodes](docs/ratings_ab.png)
+
+Across llama-8b / Claude Haiku / GPT-4o-mini the shape is the same: priming for
+ratings leaves the **recommendation set essentially unchanged** — the
+across-condition overlap sits right on the within-condition noise floor (gap ≈ 0) —
+while the **rating *talk* jumps ~20×** (numeric-score citations climb from ~2–4% to
+72–84%). Same picks, more score-name-dropping. The local 8B fabricates specific
+scores; the frontier models hedge or push back instead — a difference the same
+harness surfaces.
+
+```bash
+# materialize the matched prompt files, generate both conditions, compare
+python -c "from wine_geo.ab_experiment import write_prompt_files; write_prompt_files('out/ab')"
+python -m wine_geo --provider ollama --model llama3.1:8b --prompts out/ab/prompts_base.txt   --out-dir out/ab/neutral
+python -m wine_geo --provider ollama --model llama3.1:8b --prompts out/ab/prompts_primed.txt --out-dir out/ab/rated
+python -m wine_geo.ab_experiment llama:out/ab/neutral:out/ab/rated   # the comparison table
+```
+
 ## Trend & drift
 
 Once you have daily partitions (each writing `<root>/<date>/metrics.jsonl`), track
