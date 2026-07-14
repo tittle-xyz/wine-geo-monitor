@@ -244,6 +244,83 @@ def render_sample_size_chart(out_path, *, confidence=0.95, marks=(0.05, 0.08, 0.
     return str(out_path)
 
 
+def render_ab_comparison(results, out_path, *, title=None):
+    """The ratings A/B, across models: recommendations don't move, rating-talk explodes.
+
+    `results` is `[(label, metrics)]` from `ab_experiment.ab_metrics`. Two panels tell
+    the story side by side: left, per model, the within-condition noise floor next to
+    the across-condition Jaccard (near-equal bars = priming didn't change the picks);
+    right, per model, the score-citation rate neutral vs primed (the jump = theater).
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+
+    labels = [lbl for lbl, _ in results]
+    metrics = [m for _, m in results]
+    xs = list(range(len(labels)))
+    width = 0.38
+    calm, accent = "#56B4E9", "#D55E00"  # before/after within each panel
+
+    fig, (axA, axB) = plt.subplots(1, 2, figsize=(11, 5.2))
+
+    # Panel A — recommendation stability (pairwise Jaccard, 0–1)
+    floor = [m["floor"] for m in metrics]
+    across = [m["across"] for m in metrics]
+    axA.bar([i - width / 2 for i in xs], floor, width, color=calm, zorder=3)
+    axA.bar([i + width / 2 for i in xs], across, width, color=accent, zorder=3)
+    for i, m in zip(xs, metrics):
+        top = max(m["floor"], m["across"])
+        axA.text(i, top + 0.03, f"gap {m['gap']:+.2f}", ha="center", fontsize=8.5,
+                 color="#333333")
+    axA.set_ylim(0, 1.0)
+    axA.set_ylabel("recommendation-set pairwise Jaccard", fontsize=9)
+    axA.set_title("Recommendations barely move", fontsize=12.5, fontweight="bold",
+                  loc="left", pad=24)
+    axA.text(0.0, 1.02, "priming for ratings ≈ the model's own run-to-run noise",
+             transform=axA.transAxes, fontsize=9, color="#666666")
+    axA.legend(handles=[Patch(color=calm, label="within a condition (noise floor)"),
+                        Patch(color=accent, label="across neutral ↔ primed")],
+               loc="upper right", frameon=False, fontsize=8.5)
+
+    # Panel B — rating surface (% citing a numeric score, neutral vs primed)
+    sn = [m["score_n"] * 100 for m in metrics]
+    sr = [m["score_r"] * 100 for m in metrics]
+    axB.bar([i - width / 2 for i in xs], sn, width, color=calm, zorder=3)
+    axB.bar([i + width / 2 for i in xs], sr, width, color=accent, zorder=3)
+    for i, (a, b) in zip(xs, zip(sn, sr)):
+        axB.text(i - width / 2, a + 2, f"{a:.0f}%", ha="center", fontsize=8, color="#555555")
+        axB.text(i + width / 2, b + 2, f"{b:.0f}%", ha="center", fontsize=8, color="#555555")
+    axB.set_ylim(0, 100)
+    axB.set_ylabel("% of answers citing a numeric score", fontsize=9)
+    axB.set_title("But rating-talk explodes", fontsize=12.5, fontweight="bold",
+                  loc="left", pad=24)
+    axB.text(0.0, 1.02, "asked for “90+ points”, the model says scores — same picks",
+             transform=axB.transAxes, fontsize=9, color="#666666")
+    axB.legend(handles=[Patch(color=calm, label="neutral prompt"),
+                        Patch(color=accent, label="rating-primed prompt")],
+               loc="upper left", frameon=False, fontsize=8.5)
+
+    for ax in (axA, axB):
+        ax.set_xticks(xs)
+        ax.set_xticklabels(labels, fontsize=9.5)
+        for spine in ("top", "right"):
+            ax.spines[spine].set_visible(False)
+        ax.tick_params(length=0)
+        ax.yaxis.grid(True, color="#EAEAEA", zorder=0)
+        ax.set_axisbelow(True)
+
+    if title:
+        fig.suptitle(title, fontsize=13, fontweight="bold", x=0.02, ha="left")
+    fig.tight_layout()
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return str(out_path)
+
+
 # Categorical line colors (Okabe-Ito, fixed order; yellow dropped for contrast on white).
 _TREND_COLORS = ["#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7", "#56B4E9", "#000000"]
 
