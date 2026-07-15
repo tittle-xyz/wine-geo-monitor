@@ -38,7 +38,7 @@ Real providers: set `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (see `.env.example`),
 
 ## Conventions
 
-- Python ≥ 3.9. The core runs on the standard library; anthropic/openai/dagster/
+- Python ≥ 3.11. The core runs on the standard library; anthropic/openai/dagster/
   matplotlib are optional extras.
 - **Keep the mock provider working and offline** — tests and CI must pass with no API key.
 - Line length 100; ruff (`E,F,I`) is the linter. Run `make lint` before committing.
