@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "wine-geo-monitor"
 version = "0.5.2"
 description = "A tiny Generative Engine Optimization monitor for wine brands."
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = []  # core runs on the stdlib; real providers are optional extras
 
 [project.optional-dependencies]
@@ -34,7 +34,7 @@ code_location_name = "wine_geo"
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]

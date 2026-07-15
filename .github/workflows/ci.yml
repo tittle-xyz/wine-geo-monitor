@@ -4,20 +4,74 @@ on:
   push:
   pull_request:
 
+# A new push to a branch makes the in-flight run for that branch pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # The floor of `requires-python`, the newest release, and one in between. Test the
+      # floor or it isn't real — and test the newest or your users find the bugs first.
+      # #36's concurrency bug was invisible on 3.11 and only failed on 3.13, which is the
+      # whole argument for this matrix. Bump the floor as it goes EOL:
+      # https://devguide.python.org/versions/
+      matrix:
+        python-version: ["3.11", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install
+        run: pip install -e ".[dev,viz]"
+      - name: Lint
+        run: ruff check .
+      - name: Test
+        # The whole suite runs offline through the mock provider — no API keys here,
+        # and it must stay that way.
+        run: pytest --cov=wine_geo --cov-report=term-missing
+
+  # The core must import and run with ZERO optional dependencies. The `test` job
+  # installs extras, so it cannot prove this.
+  stdlib-only:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Install with no extras
+        run: pip install -e .
+      - name: Run the monitor on the stdlib alone
+        run: python -m wine_geo --provider mock --n 5 --seed 42
+
+  # CI never imports definitions.py otherwise, so the two documented Dagster gotchas
+  # (no `from __future__ import annotations`; the config param must be named `config`)
+  # would sail straight through. Materializing one partition offline catches both.
+  dagster:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Install
-        run: pip install -e ".[dev]"
-      - name: Lint
-        run: ruff check .
-      - name: Test
-        run: pytest --cov=wine_geo --cov-report=term-missing
+        run: pip install -e ".[dagster,viz]"
+      - name: Materialize one partition (mock provider, offline)
+        env:
+          DAGSTER_HOME: ${{ runner.temp }}/dagster_home
+        run: |
+          mkdir -p "$DAGSTER_HOME"
+          dagster asset materialize -m wine_geo.definitions \
+            --select "*" --partition 2026-07-05
 
   readiness:
     runs-on: ubuntu-latest

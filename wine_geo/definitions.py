@@ -18,7 +18,6 @@ Run it:
 
 from dataclasses import asdict
 from pathlib import Path
-from typing import List, Optional
 
 import dagster as dg
 
@@ -39,14 +38,14 @@ class SamplingConfig(dg.Config):
     model: str = DEFAULT_MODEL
     n: int = DEFAULT_N
     concurrency: int = DEFAULT_CONCURRENCY
-    seed: Optional[int] = 42  # keep None in prod for real variance
-    prompts: Optional[List[str]] = None
+    seed: int | None = 42  # keep None in prod for real variance
+    prompts: list[str] | None = None
     sla: str = "real-time"  # "overnight" routes collection through the batch API (~50% off)
 
 
 @dg.asset(partitions_def=daily, group_name="wine_geo",
           description="Raw model responses for the day — the immutable, paid layer.")
-def raw_samples(context: dg.AssetExecutionContext, config: SamplingConfig) -> List[dict]:
+def raw_samples(context: dg.AssetExecutionContext, config: SamplingConfig) -> list[dict]:
     day = context.partition_key
     provider = get_provider(config.provider, seed=config.seed)
     prompts = config.prompts or DEFAULT_PROMPTS
@@ -59,7 +58,7 @@ def raw_samples(context: dg.AssetExecutionContext, config: SamplingConfig) -> Li
 
 @dg.asset(partitions_def=daily, group_name="wine_geo",
           description="Producer mentions extracted from the day's raw responses.")
-def mentions(context: dg.AssetExecutionContext, raw_samples: List[dict]) -> List[dict]:
+def mentions(context: dg.AssetExecutionContext, raw_samples: list[dict]) -> list[dict]:
     patterns = build_patterns(load_producers(PRODUCERS_PATH))
     raw = [RawSample(**r) for r in raw_samples]
     ms = extract_stage(raw, patterns)
@@ -70,7 +69,7 @@ def mentions(context: dg.AssetExecutionContext, raw_samples: List[dict]) -> List
 @dg.asset(partitions_def=daily, group_name="wine_geo",
           description="Share-of-voice, confidence intervals, and run-to-run instability.")
 def metrics(
-    context: dg.AssetExecutionContext, raw_samples: List[dict], mentions: List[dict]
+    context: dg.AssetExecutionContext, raw_samples: list[dict], mentions: list[dict]
 ) -> dict:
     producers = load_producers(PRODUCERS_PATH)
     universe = [p["name"] for p in producers]
@@ -98,7 +97,7 @@ def metrics(
 
 @dg.asset(partitions_def=daily, group_name="wine_geo",
           description="Token spend for the day, derived from the raw layer (list price).")
-def cost(context: dg.AssetExecutionContext, raw_samples: List[dict]) -> dict:
+def cost(context: dg.AssetExecutionContext, raw_samples: list[dict]) -> dict:
     raw = [RawSample(**r) for r in raw_samples]
     c = cost_stage(raw)
     md = ["| provider / model | samples | in tok | out tok | cost (USD) |",
