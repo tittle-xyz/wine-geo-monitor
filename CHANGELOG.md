@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.0](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.5.2...wine-geo-monitor-v0.6.0) (2026-07-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* Python 3.9 and 3.10 are no longer supported. 3.9 is EOL; 3.10 reaches EOL in October 2026.
+
+### Features
+
+* require Python &gt;=3.11, test 3.11/3.13/3.14 (closes [#38](https://github.com/tittle-xyz/wine-geo-monitor/issues/38)) ([#43](https://github.com/tittle-xyz/wine-geo-monitor/issues/43)) ([1c43987](https://github.com/tittle-xyz/wine-geo-monitor/commit/1c43987265d5f3488e4f766bc00ee89aba95384c))
+
 ## [0.5.2](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.5.1...wine-geo-monitor-v0.5.2) (2026-07-15)
 
 
