@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.5.1...wine-geo-monitor-v0.5.2) (2026-07-15)
+
+
+### Bug Fixes
+
+* **ci:** publish the image on release, tagged with its version (closes [#39](https://github.com/tittle-xyz/wine-geo-monitor/issues/39)) ([#40](https://github.com/tittle-xyz/wine-geo-monitor/issues/40)) ([a3602fd](https://github.com/tittle-xyz/wine-geo-monitor/commit/a3602fd11b63deb4c2b0bccc32fadd930bee55d0))
+
 ## [0.5.1](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.5.0...wine-geo-monitor-v0.5.1) (2026-07-14)
 
 
