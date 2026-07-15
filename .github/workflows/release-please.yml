@@ -11,8 +11,32 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
     steps:
       - uses: googleapis/release-please-action@v5
+        id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # Publish the image for the release release-please just cut.
+  #
+  # This chaining is load-bearing. release-please creates the GitHub release with
+  # GITHUB_TOKEN, and GitHub does not raise workflow-triggering events for
+  # GITHUB_TOKEN actions (the recursion guard). So the `release: [published]` trigger
+  # docker-publish.yml used to carry never fired — it read as correct and silently did
+  # nothing across five releases. Calling the workflow directly, gated on
+  # release-please's own output, needs no PAT to create, scope, and rotate.
+  docker:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      ref: ${{ needs.release-please.outputs.tag_name }}
+      version: ${{ needs.release-please.outputs.version }}
+    permissions:
+      contents: read
+      packages: write

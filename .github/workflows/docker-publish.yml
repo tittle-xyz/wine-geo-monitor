@@ -1,11 +1,25 @@
 name: docker
 
-# Build and push the Dagster code-location image to ghcr on each release
-# (mirrors the track build). The home-infra kustomize overlay pins the image by
-# its immutable sha- tag; `latest` is a convenience for manual pulls.
+# Build and push the Dagster code-location image to ghcr. The home-infra kustomize
+# overlay pins the image by an immutable release tag; `latest` is a convenience for
+# manual pulls.
+#
+# Called by release-please.yml when it cuts a release — deliberately NOT triggered by
+# `release: [published]`. release-please creates the release with GITHUB_TOKEN, and
+# GitHub does not raise workflow-triggering events for GITHUB_TOKEN actions (the
+# recursion guard). That trigger read as correct and silently never fired: five
+# releases, zero builds, and the only images in ghcr came from manual dispatches.
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      ref:
+        description: commit-ish to build (the release tag, when called by release-please)
+        type: string
+        required: false
+      version:
+        description: semver of the release being built, without the leading v (e.g. 0.5.2)
+        type: string
+        required: false
   workflow_dispatch:
 
 permissions:
@@ -17,6 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Build the release tag when called; the default branch on a manual run.
+          ref: ${{ inputs.ref || github.ref }}
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -27,7 +44,19 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/tittle-xyz/wine-geo
+          # `value=` is load-bearing. Without it, type=semver reads the version out of
+          # `github.ref` — and under workflow_call that's the CALLER's ref
+          # (refs/heads/main), not the tag, so it would silently emit no version tag.
+          # release-please hands us the version; feeding it in explicitly also means the
+          # component-prefixed tag (wine-geo-monitor-v0.5.2) never has to parse as semver.
+          # semver over raw: it validates the input is a real version rather than
+          # publishing whatever string it was handed.
+          #
+          # Only the exact version is emitted — no v{{major}}.{{minor}} alias. That tag
+          # would move with every patch, which is the mutability a pinned deploy exists
+          # to escape.
           tags: |
+            type=semver,pattern=v{{version}},value=${{ inputs.version }},enable=${{ inputs.version != '' }}
             type=raw,value=latest
             type=sha,prefix=sha-,format=short
       - uses: docker/build-push-action@v6
