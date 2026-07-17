@@ -15,12 +15,40 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.version }}
+      pr: ${{ steps.release.outputs.pr }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # Refresh the readiness badge on the release PR, so it tracks releases.
+  #
+  # It lands on the release branch, not main: main is protected and the Actions bot
+  # can't push there, while a release-please PR branch isn't protected. The action
+  # does the work — scores the repo with the workflow token (unauthenticated scoring
+  # on a runner reads ~6 points low), writes the badge, and commits it if it moved.
+  #
+  # target is the repo slug, not this checkout: a release branch carries commits main
+  # doesn't, which moves the git-based signals — so score the repo the badge claims
+  # to describe, not the branch.
+  badge:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.pr }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ fromJson(needs.release-please.outputs.pr).headBranchName }}
+      - uses: tittle-xyz/toaster-ready@v0
+        with:
+          target: ${{ github.repository }}
+          badge: docs/badge.svg
+          commit: true
+          min: '0'  # no gate here; ci.yml already gates readiness on every push
 
   # Publish the image for the release release-please just cut.
   #
