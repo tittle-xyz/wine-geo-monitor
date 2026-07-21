@@ -27,6 +27,62 @@ class Completion:
 
 
 @dataclass
+class Source:
+    """One retrieved web source behind a grounded answer — the retrieval evidence."""
+
+    url: str
+    title: str
+
+
+@dataclass
+class GroundedCompletion:
+    """A completion made with web search enabled: the answer plus what it retrieved.
+
+    `sources` is the citation trail — the pages the model actually pulled in. `searched` is
+    the definitive 'did retrieval happen' signal: a declared tool is optional, so an answer
+    with no sources and no searches means the model chose to answer from memory instead.
+    """
+
+    text: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    sources: list[Source]
+    num_searches: int
+    stop_reason: str | None = None
+
+    @property
+    def searched(self) -> bool:
+        return self.num_searches > 0 or bool(self.sources)
+
+
+def parse_search_blocks(blocks) -> tuple[str, list[Source], int]:
+    """Split a grounded response's content into (answer text, sources, search-call count).
+
+    Duck-types the SDK content blocks so it's testable without the SDK: a `text` block is
+    answer text, a `server_tool_use` block is one search the model issued, and a
+    `web_search_tool_result` block carries a *list* of results on success (or a single
+    error object, e.g. max_uses_exceeded — counted as a search with no usable sources).
+    """
+    text_parts: list[str] = []
+    sources: list[Source] = []
+    num_searches = 0
+    for b in blocks:
+        bt = getattr(b, "type", None)
+        if bt == "text":
+            text_parts.append(getattr(b, "text", "") or "")
+        elif bt == "server_tool_use":
+            num_searches += 1
+        elif bt == "web_search_tool_result":
+            content = getattr(b, "content", None)
+            if isinstance(content, list):
+                for r in content:
+                    sources.append(Source(url=getattr(r, "url", "") or "",
+                                          title=getattr(r, "title", "") or ""))
+    return "".join(text_parts), sources, num_searches
+
+
+@dataclass
 class BatchRequest:
     """One prompt to fulfill via a provider's batch API, tagged with a custom_id.
 
@@ -56,6 +112,14 @@ BATCH_DISCOUNT = 0.5
 
 # Answers come back in ~400 tokens; keep sync and batch paths on the same ceiling.
 MAX_TOKENS = 400
+
+# Web search is a paid, separately-billed server tool. The basic variant works on Haiku;
+# newer models can use web_search_20260209 (dynamic filtering), but the basic one returns
+# the same citations, which is all the #23 retrieval probe needs.
+WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search"}
+# Grounded answers carry search results + citations, so give them more room than the terse
+# ungrounded ceiling.
+GROUNDED_MAX_TOKENS = 1024
 
 
 def estimate_cost(
@@ -95,6 +159,19 @@ class BatchProvider(Protocol):
         finishes or ends in a terminal error state.
         """
         ...
+
+
+# Web search is another optional capability, advertised with `supports_search = True` and a
+# `complete_grounded`. Same pattern as batch: a provider without it just can't run the
+# retrieval probe. `force=True` uses tool_choice to guarantee a search (so the probe isn't
+# silently answered from memory); `force=False` measures whether the model searches on its own.
+class SearchProvider(Protocol):
+    name: str
+    supports_search: bool
+
+    def complete_grounded(
+        self, prompt: str, *, model: str, force: bool = True
+    ) -> GroundedCompletion: ...
 
 
 # --- Mock -----------------------------------------------------------------
@@ -164,6 +241,7 @@ class MockProvider:
 
     name = "mock"
     supports_batch = True
+    supports_search = True
 
     def __init__(self, seed: int | None = None):
         self._rng = random.Random(seed)
@@ -203,6 +281,25 @@ class MockProvider:
             output_tokens=max(1, int(len(text.split()) * 1.3)),
         )
 
+    def complete_grounded(
+        self, prompt: str, *, model: str, force: bool = True
+    ) -> GroundedCompletion:
+        """Offline stand-in: reuse the weighted pick for text, return canned sources.
+
+        Lets the grounded path — and anything built on it — run in tests with no key and no
+        network, the same way `complete` does for the ungrounded path.
+        """
+        c = self.complete(prompt, model=model)
+        sources = [
+            Source(url="https://example.com/napa-value-picks", title="Best value Napa Cabs"),
+            Source(url="https://example.com/under-40", title="Napa Cabernet under $40"),
+        ]
+        return GroundedCompletion(
+            text=c.text, model=c.model,
+            input_tokens=c.input_tokens, output_tokens=c.output_tokens,
+            sources=sources, num_searches=1, stop_reason="end_turn",
+        )
+
 
 # --- Real providers -------------------------------------------------------
 
@@ -210,6 +307,7 @@ class MockProvider:
 class AnthropicProvider:
     name = "anthropic"
     supports_batch = True
+    supports_search = True
 
     def __init__(self) -> None:
         try:
@@ -217,6 +315,34 @@ class AnthropicProvider:
         except ImportError as e:  # pragma: no cover - env dependent
             raise RuntimeError("Anthropic provider needs: pip install anthropic") from e
         self._client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY
+
+    def complete_grounded(  # pragma: no cover - network
+        self, prompt: str, *, model: str, force: bool = True
+    ) -> GroundedCompletion:
+        """Answer with the web search tool enabled; return the answer + retrieved sources.
+
+        `force=True` sets tool_choice so the model must search (verified: forcing works on
+        this server tool), keeping the retrieval condition clean rather than letting the
+        model silently answer from memory. The citation trail comes back as
+        `web_search_tool_result` blocks in the same response — one call, no loop. A long
+        agentic search could stop with 'pause_turn'; that's surfaced in stop_reason, not
+        handled, since the monitor's prompts are single-shot.
+        """
+        kwargs = {
+            "model": model,
+            "max_tokens": GROUNDED_MAX_TOKENS,
+            "messages": [{"role": "user", "content": prompt}],
+            "tools": [WEB_SEARCH_TOOL],
+        }
+        if force:
+            kwargs["tool_choice"] = {"type": "any"}
+        resp = self._client.messages.create(**kwargs)
+        text, sources, num = parse_search_blocks(resp.content)
+        return GroundedCompletion(
+            text=text, model=model,
+            input_tokens=resp.usage.input_tokens, output_tokens=resp.usage.output_tokens,
+            sources=sources, num_searches=num, stop_reason=resp.stop_reason,
+        )
 
     def complete(self, prompt: str, *, model: str) -> Completion:
         # NOTE: current Anthropic models (Opus 4.8/4.7, Sonnet 5, Fable 5) reject a
@@ -296,6 +422,7 @@ class AnthropicProvider:
 class OpenAIProvider:
     name = "openai"
     supports_batch = True
+    supports_search = False  # web search is a separate path (Responses API) — next increment
 
     def __init__(self) -> None:
         try:
@@ -406,6 +533,7 @@ class OllamaProvider:
     """
 
     name = "ollama"
+    supports_search = False  # local model, no web access
 
     def __init__(self) -> None:
         import os
