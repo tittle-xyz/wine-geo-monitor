@@ -8,6 +8,15 @@ from pathlib import Path
 DATA_DIR = Path(__file__).parent / "data"
 PRODUCERS_PATH = DATA_DIR / "producers.json"
 
+# The domain terms entity-resolution uses to tell our winery apart from a same-named
+# footballer (#23 prominence). This is the one knob a different `-monitor` swaps — the
+# resolver logic stays put. Kept here, not hardcoded in prominence.py, for exactly that.
+DOMAIN_TERMS = ["wine", "winery", "vineyard", "négociant", "negociant", "cabernet", "winemaker"]
+
+# Where prominence snapshots live — the durable, re-derivable record of what the web looked
+# like when we asked (ADR-0002 applied to the prominence lookup).
+PROMINENCE_PATH = "out/prominence.jsonl"
+
 
 def load_dotenv(path: str | Path | None = None) -> None:
     """Populate os.environ from a .env file — a tiny, dependency-free loader.

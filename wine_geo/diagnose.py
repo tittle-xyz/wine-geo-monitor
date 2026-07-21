@@ -17,7 +17,7 @@ The design the CAM X spike pointed to: **cheap lookups first, paid probes only t
 tells you whether a paid probe is even worth running, and for which (brand × model) cells.
 
     python -m wine_geo.diagnose "CAM X" --since 2025 --model claude-haiku-4-5
-    python -m wine_geo.diagnose "CAM X" --since 2025 --probe --provider anthropic --model claude-haiku-4-5
+    python -m wine_geo.diagnose "CAM X" --since 2025 --probe --provider anthropic
 """
 
 from __future__ import annotations
@@ -31,6 +31,11 @@ from pathlib import Path
 
 from . import config
 from .extract import build_patterns, extract_mentions, load_producers
+from .prominence import (
+    load_snapshot,
+    prior_with_prominence,
+    prominence_level,
+)
 from .schema import read_jsonl
 
 CUTOFFS_PATH = config.DATA_DIR / "model_cutoffs.json"
@@ -213,27 +218,53 @@ def main(argv=None):
     ap.add_argument("--anchor", action="append", default=[],
                     help="a falsifiable fact the real brand would let a model state (repeatable)")
     ap.add_argument("--probe", action="store_true", help="also run the paid knowledge probe")
-    ap.add_argument("--provider", default="anthropic", choices=["mock", "anthropic", "openai", "ollama"])
+    ap.add_argument("--provider", default="anthropic",
+                    choices=["mock", "anthropic", "openai", "ollama"])
     ap.add_argument("--n", type=int, default=5, help="probe samples")
+    ap.add_argument("--prominence-store", default=config.PROMINENCE_PATH,
+                    help="durable prominence snapshot (JSONL)")
+    ap.add_argument("--refresh-prominence", action="store_true",
+                    help="fetch prominence from Wikipedia/Wikidata now and snapshot it")
     args = ap.parse_args(argv)
 
     producers = load_producers(args.producers)
     cutoffs = load_cutoffs()
+    entry = next((p for p in producers if p["name"] == args.brand), None)
 
     print(f"# Diagnosis: {args.brand}\n")
 
-    # 1. knowledge prior (free)
+    # 1. knowledge prior — date only (free)
     print("## Knowledge prior (documentation date vs reliable cutoff)")
     prior_for_model = None
-    for model, entry in cutoffs.items():
+    for model, cut in cutoffs.items():
         p = knowledge_prior(args.since, model, cutoffs)
         marker = "  <- target model" if model == args.model else ""
-        print(f"   {model:22s} cutoff {entry.get('reliable_cutoff','?')}  -> {p}{marker}")
+        print(f"   {model:22s} cutoff {cut.get('reliable_cutoff','?')}  -> {p}{marker}")
         if model == args.model:
             prior_for_model = p
     print()
 
-    # 2. ranking signal (free)
+    # 2. prominence — refine the prior with how much the brand was written about (free lookup,
+    #    snapshotted so a diagnosis stays re-derivable even as Wikipedia changes; ADR-0002).
+    print(f"## Prominence (Wikipedia/Wikidata footprint, snapshot: {args.prominence_store})")
+    if args.refresh_prominence:
+        from .prominence import fetch_prominence, save_snapshot
+        aliases = entry.get("aliases", []) if entry else []
+        rec = fetch_prominence(args.brand, aliases, config.DOMAIN_TERMS)
+        save_snapshot(args.prominence_store, rec)
+        print(f"   fetched: {rec['resolved_title']} — {rec['pageviews']} pv/mo, "
+              f"{rec['summary_len']} bytes -> {rec['level']}")
+    snap = load_snapshot(args.prominence_store).get(args.brand)
+    if snap:
+        level = prominence_level(snap)
+        prior_for_model = prior_with_prominence(prior_for_model, level)
+        print(f"   {args.brand}: {snap.get('resolved_title')} -> {level}  "
+              f"(refined prior: {prior_for_model})")
+    else:
+        print("   (no snapshot — run with --refresh-prominence)")
+    print()
+
+    # 3. ranking signal (free)
     print(f"## Ranking signal (saved responses in {args.runs})")
     signal = ranking_signal(args.brand, producers, args.runs)
     ranked_rate = signal.get(args.model, {}).get("rate", 0.0)
@@ -243,7 +274,7 @@ def main(argv=None):
         print("   (no saved runs found)")
     print()
 
-    # 3. knowledge probe (paid, optional)
+    # 4. knowledge probe (paid, optional)
     known = None
     if args.probe:
         config.load_dotenv()
@@ -262,7 +293,7 @@ def main(argv=None):
         known = top in ("knows", "hedges", "unverified")
         print()
 
-    # 4. diagnosis
+    # 5. diagnosis
     print("## Diagnosis")
     print(f"   {diagnose(known, ranked_rate)}")
     return 0

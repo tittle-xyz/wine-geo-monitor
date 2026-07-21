@@ -33,11 +33,13 @@ class TestClassifyProbe:
         assert classify_probe("I'm not familiar with that producer.", self.ANCHORS) == "disowns"
 
     def test_accurate_anchor_is_knows(self):
-        assert classify_probe("Founded by Cameron Hughes as a négoce project.", self.ANCHORS) == "knows"
+        txt = "Founded by Cameron Hughes as a négoce project."
+        assert classify_probe(txt, self.ANCHORS) == "knows"
 
     def test_confident_but_no_anchor_is_confabulates(self):
         # The De Négoce 'founded by Jon Bonné' failure: confident, zero real anchors.
-        assert classify_probe("It was founded by Jon Bonné, a wine critic.", self.ANCHORS) == "confabulates"
+        txt = "It was founded by Jon Bonné, a wine critic."
+        assert classify_probe(txt, self.ANCHORS) == "confabulates"
 
     def test_no_anchors_given_is_unverified(self):
         assert classify_probe("A fine California winery.", []) == "unverified"
