@@ -16,6 +16,7 @@ from wine_geo.providers import (
     OllamaProvider,
     OpenAIProvider,
     Source,
+    parse_openai_search,
     parse_search_blocks,
 )
 
@@ -75,14 +76,40 @@ class TestGroundedCompletionSearched:
         assert GroundedCompletion("t", "m", 1, 1, [], 0).searched is False
 
 
+class TestParseOpenAISearch:
+    """OpenAI Responses API shape (from the spike): output items + url_citation annotations."""
+
+    def _search(self):
+        return SimpleNamespace(type="web_search_call")
+
+    def _message(self, citations):
+        anns = [SimpleNamespace(type="url_citation", url=u, title=t) for u, t in citations]
+        return SimpleNamespace(type="message", content=[SimpleNamespace(annotations=anns)])
+
+    def test_extracts_text_sources_and_count(self):
+        items = [
+            self._search(),
+            self._message([("https://camxwine.com?utm_source=openai", "CAM X"),
+                           ("https://a.com", "A")]),
+        ]
+        text, sources, n = parse_openai_search(items, "Here are picks.")
+        assert text == "Here are picks."
+        assert n == 1
+        assert [s.url for s in sources] == ["https://camxwine.com?utm_source=openai", "https://a.com"]
+
+    def test_no_search_items_means_answered_from_memory(self):
+        text, sources, n = parse_openai_search([self._message([])], "From memory.")
+        assert n == 0 and sources == [] and text == "From memory."
+
+
 class TestCapabilityFlags:
     # Class attributes — no construction (real providers need keys/network to instantiate).
     def test_search_capable_providers(self):
         assert MockProvider.supports_search is True
         assert AnthropicProvider.supports_search is True
+        assert OpenAIProvider.supports_search is True  # now cross-provider (ADR-0005 parity)
 
     def test_providers_without_search(self):
-        assert OpenAIProvider.supports_search is False
         assert OllamaProvider.supports_search is False
 
 

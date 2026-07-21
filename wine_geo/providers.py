@@ -82,6 +82,27 @@ def parse_search_blocks(blocks) -> tuple[str, list[Source], int]:
     return "".join(text_parts), sources, num_searches
 
 
+def parse_openai_search(output_items, output_text) -> tuple[str, list[Source], int]:
+    """Normalize OpenAI Responses API output into (text, sources, search-call count).
+
+    Duck-typed for testability: `output_items` is resp.output (each item has `.type`, and
+    message items carry `.content[].annotations[]` url_citations with `.url`/`.title`);
+    `output_text` is resp.output_text. Same target shape as parse_search_blocks — each
+    provider normalizes its own wire format to the common one, per ADR-0005.
+    """
+    sources: list[Source] = []
+    num_searches = 0
+    for it in output_items:
+        if "search" in (getattr(it, "type", "") or ""):
+            num_searches += 1
+        for c in getattr(it, "content", None) or []:
+            for a in getattr(c, "annotations", None) or []:
+                url = getattr(a, "url", "") or ""
+                if url:
+                    sources.append(Source(url=url, title=getattr(a, "title", "") or ""))
+    return output_text or "", sources, num_searches
+
+
 @dataclass
 class BatchRequest:
     """One prompt to fulfill via a provider's batch API, tagged with a custom_id.
@@ -422,7 +443,7 @@ class AnthropicProvider:
 class OpenAIProvider:
     name = "openai"
     supports_batch = True
-    supports_search = False  # web search is a separate path (Responses API) — next increment
+    supports_search = True
 
     def __init__(self) -> None:
         try:
@@ -444,6 +465,28 @@ class OpenAIProvider:
             model=model,
             input_tokens=usage.prompt_tokens,
             output_tokens=usage.completion_tokens,
+        )
+
+    def complete_grounded(  # pragma: no cover - network
+        self, prompt: str, *, model: str, force: bool = True
+    ) -> GroundedCompletion:
+        """Grounded via the Responses API web_search tool; normalize to GroundedCompletion.
+
+        A different endpoint from the ungrounded chat-completions path, but the same
+        capability and the same normalized shape — the seam hides the vendor difference
+        (ADR-0005). `force=True` sets tool_choice so the model must search.
+        """
+        kwargs = {"model": model, "tools": [{"type": "web_search"}], "input": prompt}
+        if force:
+            kwargs["tool_choice"] = {"type": "web_search"}
+        resp = self._client.responses.create(**kwargs)
+        text, sources, num = parse_openai_search(resp.output, getattr(resp, "output_text", ""))
+        usage = resp.usage
+        return GroundedCompletion(
+            text=text, model=model,
+            input_tokens=getattr(usage, "input_tokens", 0),
+            output_tokens=getattr(usage, "output_tokens", 0),
+            sources=sources, num_searches=num, stop_reason=getattr(resp, "status", None),
         )
 
     def complete_batch(  # pragma: no cover - env dependent
