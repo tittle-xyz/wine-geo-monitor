@@ -1,0 +1,15 @@
+{
+  "_about": "Reliable vs training knowledge cutoffs per model. The FIRST-LINE lookup for #23: a brand documented only AFTER a model's reliable cutoff is in a knowledge-gap regime a priori — no ranking optimization can help it there. Use reliable_cutoff, not training_cutoff: a model's knowledge of the tail thins out well before its raw training-data date, so behavior tracks the reliable date (see the CAM X spike). Dates are YYYY-MM. Verify and extend from vendor docs.",
+  "models": {
+    "gpt-4o-mini": {
+      "reliable_cutoff": "2023-10",
+      "training_cutoff": "2023-10",
+      "source": "OpenAI docs; model self-reported 'October 2023' in the probe"
+    },
+    "claude-haiku-4-5": {
+      "reliable_cutoff": "2025-02",
+      "training_cutoff": "2025-07",
+      "source": "Anthropic docs (distinguishes reliable ~Feb 2025 from training Jul 2025)"
+    }
+  }
+}
