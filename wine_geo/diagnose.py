@@ -8,10 +8,9 @@ The design the CAM X spike pointed to: **cheap lookups first, paid probes only t
 
     LOOKUP (free)                      PROBE (paid, optional)
     ─────────────────                  ──────────────────────
-    knowledge_prior  date vs cutoff    knowledge_probe  does the model actually know it?
-    ranking_signal   mine saved runs   ─
-    prominence       web footprint     ─   (TODO)
-    retrieval_signal search presence   ─   (TODO — needs a grounded surface)
+    knowledge_prior  date vs cutoff    knowledge_probe   does the model actually know it?
+    prominence       web footprint     retrieval_signal  grounded: retrieved vs. ranked
+    ranking_signal   mine saved runs
 
 `knowledge_prior` and `ranking_signal` need no network and no key: they set a prior that
 tells you whether a paid probe is even worth running, and for which (brand × model) cells.
@@ -25,6 +24,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -182,25 +182,77 @@ def diagnose(known: bool | None, ranked_rate: float, *, ranked_floor: float = 0.
     return "known-and-ranked"
 
 
-# --- TODO(#23) seams — flesh these out as we test ----------------------------
+# --- retrieval probe (paid, grounded) — separates not-retrieved from not-ranked ----
 
-def prominence(brand: str) -> dict:
-    """TODO(#23): web-footprint proxy (Wikipedia/Wikidata presence, result count).
+def _collapse(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", s.lower())
 
-    Separates 'too new' (postdates cutoff) from 'too obscure' (predates it but thinly
-    documented) — the Cameron Hughes case, where date said 'known' but the model hedged.
-    Knowledge ≈ date × prominence × model size.
+
+def brand_in_sources(brand: str, aliases, sources) -> bool:
+    """Fuzzy: is the brand named in any retrieved source's URL or title?
+
+    A *diagnostic* signal, not the official regex metric: URLs mangle names
+    ('camxwine.com', 'cam-x'), so match on the punctuation-stripped form. Short aliases
+    can false-positive, so require ≥4 chars — and the answer-text check (which does use
+    the official matcher) is the confirming half.
     """
-    raise NotImplementedError("prominence proxy not built yet — see #23")
+    forms = [f for f in (_collapse(x) for x in [brand, *aliases]) if len(f) >= 4]
+    for s in sources:
+        hay = _collapse(getattr(s, "url", "") + " " + getattr(s, "title", ""))
+        if any(f in hay for f in forms):
+            return True
+    return False
 
 
-def retrieval_signal(brand: str, query: str) -> dict:
-    """TODO(#23): the not-retrieved probe. Needs a grounded surface (Perplexity / Google
-    AI mode) — base-model APIs don't retrieve, so this mode is invisible to `knowledge_probe`.
-    Cheap web checks that steer it: does the brand rank for `query`, is it in the favored
-    sources, does robots.txt block GPTBot/ClaudeBot/PerplexityBot.
+def retrieval_signal(brand, aliases, provider, model, prompts, *, n) -> dict:
+    """Run the rec prompts with web search forced; measure retrieval vs. ranking, grounded.
+
+    Per grounded run: did the model search, did the brand's pages get *retrieved*
+    (`brand_in_sources`, a diagnostic), and did the grounded answer *recommend* the brand
+    (the official regex matcher — same instrument as share-of-voice, per ADR-0004/0005).
+    The gap between 'retrieved' and 'recommended when grounded' is what splits not-retrieved
+    from not-ranked. Requires a search-capable provider (ADR-0005).
     """
-    raise NotImplementedError("retrieval probe not built yet — see #23")
+    from .providers import estimate_cost
+
+    patterns = build_patterns([{"name": brand, "aliases": list(aliases)}])
+    runs = searched = retrieved = recommended = 0
+    cost = 0.0
+    sample_sources: list = []
+    for prompt in prompts:
+        for _ in range(n):
+            g = provider.complete_grounded(prompt, model=model, force=True)
+            runs += 1
+            cost += estimate_cost(g.input_tokens, g.output_tokens, model)
+            searched += 1 if g.searched else 0
+            retrieved += 1 if brand_in_sources(brand, aliases, g.sources) else 0
+            recommended += 1 if brand in extract_mentions(g.text, patterns) else 0
+            if g.sources and not sample_sources:
+                sample_sources = g.sources[:5]
+
+    def rate(x):
+        return x / runs if runs else 0.0
+
+    return {
+        "runs": runs, "num_searched": searched,
+        "searched_rate": rate(searched), "retrieved_rate": rate(retrieved),
+        "recommended_rate": rate(recommended), "cost": cost,
+        "sample_sources": sample_sources,
+    }
+
+
+def diagnose_retrieval(
+    retrieved_rate: float, recommended_rate: float, *, floor: float = 0.02
+) -> str:
+    """The retrieval-mode verdict, given the grounded probe's rates."""
+    if retrieved_rate <= floor:
+        return ("NOT RETRIEVED (retrieval gap) — its pages don't surface for these "
+                "queries; get into the sources that rank for them (the movable lever)")
+    if recommended_rate <= floor:
+        return ("RETRIEVED BUT NOT RANKED — the model saw its sources and still didn't "
+                "pick it; attributes/positioning, not findability")
+    return ("RETRIEVED & RECOMMENDED when grounded — visible on grounded surfaces, so a "
+            "parametric 0% is a knowledge gap grounding overcomes")
 
 
 # --- CLI ---------------------------------------------------------------------
@@ -225,6 +277,10 @@ def main(argv=None):
                     help="durable prominence snapshot (JSONL)")
     ap.add_argument("--refresh-prominence", action="store_true",
                     help="fetch prominence from Wikipedia/Wikidata now and snapshot it")
+    ap.add_argument("--retrieval", action="store_true",
+                    help="run the paid grounded retrieval probe (web search)")
+    ap.add_argument("--retrieval-prompts", type=int, default=3,
+                    help="how many rec prompts to ground (bounds web-search cost)")
     args = ap.parse_args(argv)
 
     producers = load_producers(args.producers)
@@ -293,9 +349,39 @@ def main(argv=None):
         known = top in ("knows", "hedges", "unverified")
         print()
 
-    # 5. diagnosis
+    # 5. retrieval probe (paid, grounded, optional) — splits not-retrieved from not-ranked
+    retrieval = None
+    if args.retrieval:
+        config.load_dotenv()
+        from .providers import get_provider
+        provider = get_provider(args.provider)
+        print(f"## Retrieval probe (grounded web search, {args.model})")
+        if not getattr(provider, "supports_search", False):
+            print(f"   ! provider '{args.provider}' has no web-search capability "
+                  f"(ADR-0005) — skipped")
+        else:
+            aliases = entry.get("aliases", []) if entry else []
+            prompts = config.DEFAULT_PROMPTS[: args.retrieval_prompts]
+            retrieval = retrieval_signal(
+                args.brand, aliases, provider, args.model, prompts, n=args.n)
+            r = retrieval
+            print(f"   {r['runs']} grounded runs over {len(prompts)} prompt(s)")
+            print(f"   searched:               {100 * r['searched_rate']:5.1f}%")
+            print(f"   brand in sources:       {100 * r['retrieved_rate']:5.1f}%  "
+                  f"(retrieved for these queries)")
+            print(f"   recommended (grounded): {100 * r['recommended_rate']:5.1f}%")
+            for s in r["sample_sources"][:4]:
+                print(f"     source: {s.title!s:38.38}  {s.url}")
+            fee = r["num_searched"] * 0.01  # ~ web-search tool fee, on top of token cost
+            print(f"   spend: ~${r['cost']:.4f} tokens + ~${fee:.2f} web search")
+        print()
+
+    # 6. diagnosis
     print("## Diagnosis")
     print(f"   {diagnose(known, ranked_rate)}")
+    if retrieval is not None:
+        verdict = diagnose_retrieval(retrieval["retrieved_rate"], retrieval["recommended_rate"])
+        print(f"   {verdict}")
     return 0
 
 

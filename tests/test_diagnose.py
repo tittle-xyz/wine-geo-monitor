@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from wine_geo.diagnose import classify_probe, diagnose, knowledge_prior
+from types import SimpleNamespace
+
+from wine_geo.diagnose import (
+    brand_in_sources,
+    classify_probe,
+    diagnose,
+    diagnose_retrieval,
+    knowledge_prior,
+)
 
 CUTOFFS = {
     "gpt-4o-mini": {"reliable_cutoff": "2023-10"},
@@ -65,3 +73,38 @@ class TestDiagnose:
 
     def test_no_probe_but_surfaced_needs_no_probe(self):
         assert "no probe needed" in diagnose(known=None, ranked_rate=0.4)
+
+
+def _src(url, title=""):
+    return SimpleNamespace(url=url, title=title)
+
+
+class TestBrandInSources:
+    def test_matches_brand_in_mangled_url(self):
+        # 'CAM X' -> 'camx' should match 'camxwine.com'
+        assert brand_in_sources("CAM X", ["CAMX"], [_src("https://camxwine.com/")]) is True
+
+    def test_matches_alias_in_title(self):
+        srcs = [_src("https://winebusiness.com/x", "Cameron Hughes Launches CAM X")]
+        assert brand_in_sources("CAM X", ["Cameron Hughes"], srcs) is True
+
+    def test_no_match_when_absent(self):
+        assert brand_in_sources("CAM X", ["Cameron Hughes"], [_src("https://caymus.com/")]) is False
+
+    def test_short_aliases_ignored(self):
+        # a 2-char alias must not spuriously match; only forms >= 4 chars count
+        assert brand_in_sources("XY", ["XY"], [_src("https://anything-xy-here.com/")]) is False
+
+
+class TestDiagnoseRetrieval:
+    def test_not_retrieved(self):
+        v = diagnose_retrieval(retrieved_rate=0.0, recommended_rate=0.0)
+        assert v.startswith("NOT RETRIEVED")
+
+    def test_retrieved_but_not_ranked(self):
+        assert diagnose_retrieval(retrieved_rate=0.8, recommended_rate=0.0).startswith(
+            "RETRIEVED BUT NOT RANKED")
+
+    def test_retrieved_and_recommended(self):
+        assert diagnose_retrieval(retrieved_rate=0.8, recommended_rate=0.5).startswith(
+            "RETRIEVED & RECOMMENDED")
