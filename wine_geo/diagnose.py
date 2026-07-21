@@ -27,7 +27,9 @@ import json
 import re
 import sys
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 from . import config
 from .extract import build_patterns, extract_mentions, load_producers
@@ -255,6 +257,86 @@ def diagnose_retrieval(
             "parametric 0% is a knowledge gap grounding overcomes")
 
 
+# --- recommender (Phase 2): cause -> targeted lever + honest timescale --------
+
+@dataclass
+class Recommendation:
+    cause: str
+    timescale: str
+    lever: str
+    detail: str = ""
+
+
+def _domains(sources, limit: int = 4) -> list[str]:
+    """Distinct netlocs (www-stripped) from the retrieved sources — the target pages."""
+    seen: list[str] = []
+    for s in sources:
+        d = urlparse(getattr(s, "url", "")).netloc.replace("www.", "")
+        if d and d not in seen:
+            seen.append(d)
+    return seen[:limit]
+
+
+def recommend(known, ranked_rate, retrieval, *, floor: float = 0.02) -> list[Recommendation]:
+    """Turn the diagnosis into targeted levers with honest timescales (Phase 2, #23).
+
+    Prioritizes the movable gaps (retrieval, ranking) and stays honest that the knowledge
+    lever is slow. When the grounded probe ran and the brand isn't retrieved, the
+    recommendation names the actual sources the retriever pulls — evidence-backed targets,
+    not generic advice.
+    """
+    recs: list[Recommendation] = []
+    ranked = ranked_rate > floor
+
+    if retrieval is not None:
+        retrieved = retrieval["retrieved_rate"] > floor
+        rec_grounded = retrieval["recommended_rate"] > floor
+        if not retrieved:
+            targets = _domains(retrieval.get("sample_sources", []))
+            where = ", ".join(targets) if targets else "listicles/retailers"
+            recs.append(Recommendation(
+                cause="not-retrieved", timescale="weeks",
+                lever="get into the sources that rank for this query (the movable lever); "
+                      "first verify crawlability — robots.txt AI-crawler blocks, llms.txt",
+                detail=f"the retriever pulls {where} for this query; the brand is on none"))
+        elif not rec_grounded:
+            recs.append(Recommendation(
+                cause="not-ranked", timescale="weeks",
+                lever="sharpen positioning and the attributes the model weighs for this "
+                      "query's intent",
+                detail="its pages were retrieved and still not chosen — relevance, not "
+                       "findability"))
+        elif not ranked:
+            recs.append(Recommendation(
+                cause="grounded-visible", timescale="—",
+                lever="ensure the customer's surfaces are grounded (browsing / AI mode); "
+                      "parametric will lag",
+                detail="surfaced when grounded but invisible parametrically"))
+    elif known is True and not ranked:
+        recs.append(Recommendation(
+            cause="not-ranked", timescale="weeks",
+            lever="known but not surfaced — sharpen positioning/attributes for the query",
+            detail="run --retrieval to confirm it's ranking, not retrieval"))
+
+    if known is False:
+        recs.append(Recommendation(
+            cause="not-known", timescale="quarters+ (parametric)",
+            lever="parametric knowledge only shifts across model generations; your near-term "
+                  "lever is retrieval (above) or getting documented to seed the next cycle",
+            detail="the least controllable lever — set expectations, don't wait on it"))
+    elif known is None and not ranked and retrieval is None:
+        recs.append(Recommendation(
+            cause="inconclusive", timescale="—",
+            lever="run --probe and --retrieval to localize the failing gate before prescribing",
+            detail="a 0% share alone doesn't say which of know / retrieve / rank is failing"))
+
+    if not recs:
+        recs.append(Recommendation(
+            cause="none", timescale="—",
+            lever="known and ranked — maintain", detail="no attribution gap detected"))
+    return recs
+
+
 # --- CLI ---------------------------------------------------------------------
 
 def main(argv=None):
@@ -382,6 +464,14 @@ def main(argv=None):
     if retrieval is not None:
         verdict = diagnose_retrieval(retrieval["retrieved_rate"], retrieval["recommended_rate"])
         print(f"   {verdict}")
+    print()
+
+    # 7. recommendations (Phase 2) — cause -> targeted lever + honest timescale
+    print("## Recommendations")
+    for r in recommend(known, ranked_rate, retrieval):
+        print(f"   [{r.cause} | {r.timescale}] {r.lever}")
+        if r.detail:
+            print(f"      {r.detail}")
     return 0
 
 
