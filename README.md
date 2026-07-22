@@ -148,6 +148,26 @@ python -m wine_geo.trend out/daily --prompt p0 --chart out/trend.png
 One line per producer; a ⚠ marks a move past the noise floor. Backfill a range of
 partitions to exercise it, or let the daily schedule fill them in.
 
+## Did the intervention work?
+
+Trend tells you a brand *moved*; it can't tell you *your change* moved it. Share drifts on
+its own — the model updates, the category shifts, it's sampling noise. So after you act on a
+`diagnose` recommendation (get a brand into the listicles the retriever pulls, say), check it
+against an **untouched control brand**: the control absorbs whatever hit both, and the leftover
+— how much *more* the treated brand changed — is what's specific to your intervention
+(difference-in-differences, over the same daily partitions).
+
+```bash
+python -m wine_geo.verify out/daily "CAM X" --control "Cameron Hughes" \
+    --lever "added to 'best value Napa Cab' listicles"
+# → LIKELY REAL / CONFOUNDED / NO DETECTABLE EFFECT / SUGGESTIVE
+```
+
+The verdict is graded and in plain terms, not a p-value: it propagates the stored bootstrap CIs
+into the wobble on the difference, and stays honest — a +6-point move that's inside a ±18-point
+give-or-take reads **NO DETECTABLE EFFECT**, not a win. Defaults to first-vs-last partition; pin
+`--base`/`--latest` for an exact before/after window.
+
 ## Run it as a Dagster DAG
 
 The same stages, wrapped as a **daily-partitioned** asset graph

@@ -15,7 +15,9 @@ wiring it to the daily partitions (via trend.load_series) is the next step.
 
 from __future__ import annotations
 
+import argparse
 import math
+import sys
 from dataclasses import dataclass
 
 Z = 1.96  # 95% — matches the stored bootstrap CIs
@@ -97,3 +99,115 @@ def _verdict(dt, dc, did, treated_moved, control_moved, beyond) -> str:
                 f"the category shifted, not attributable to the intervention")
     return (f"SUGGESTIVE — treated moved {_pts(dt)} and the control barely did ({_pts(dc)}), but "
             f"the difference ({_pts(did)}) is within its own give-or-take; needs more samples")
+
+
+# --- wiring to the durable daily partitions (trend.load_series's (share, ci_lo, ci_hi)) ---
+
+
+def _measure(series, brand, date):
+    """(share, ci_lo, ci_hi) for a brand on a date; absent == not recommended == 0.
+
+    Mirrors trend._at: a brand that simply wasn't named on a day reads as a real 0%, not as
+    missing data — which is exactly the before-state an intervention is trying to move off of.
+    """
+    return series.get(brand, {}).get(date, (0.0, 0.0, 0.0))
+
+
+@dataclass
+class PartitionVerify:
+    """A verdict wired to real days: which two dates, the two brands, their four measurements,
+    and the pure VerifyResult over them. `*_seen` flags a brand that never appears at all."""
+    base: str
+    latest: str
+    treated: str
+    control: str
+    treated_base: tuple
+    treated_latest: tuple
+    control_base: tuple
+    control_latest: tuple
+    result: VerifyResult
+    treated_seen: bool
+    control_seen: bool
+
+
+def verify_from_partitions(root, treated, control, *, prompt_id="p0", base=None, latest=None):
+    """Read the durable daily metrics under `root` and verify the treated brand's before/after
+    move against an untouched control's.
+
+    Baseline/latest default to the first/last day with data (like the #11 drift test); pass
+    `base`/`latest` to pin exact dates — e.g. the day before you intervened vs. two weeks after.
+    Raises ValueError if fewer than two days exist or a pinned date is missing.
+    """
+    from .trend import load_series
+
+    dates, series = load_series(root, prompt_id)
+    if len(dates) < 2:
+        raise ValueError(f"need >= 2 daily partitions under {root!r} (found {len(dates)})")
+    b = base or dates[0]
+    la = latest or dates[-1]
+    for d in (b, la):
+        if d not in dates:
+            raise ValueError(f"date {d!r} not among partitions {dates}")
+
+    tb, tl = _measure(series, treated, b), _measure(series, treated, la)
+    cb, cl = _measure(series, control, b), _measure(series, control, la)
+    return PartitionVerify(
+        base=b, latest=la, treated=treated, control=control,
+        treated_base=tb, treated_latest=tl, control_base=cb, control_latest=cl,
+        result=verify_intervention(tb, tl, cb, cl),
+        treated_seen=treated in series, control_seen=control in series,
+    )
+
+
+def _fmt_move(label, name, base_m, latest_m, moved) -> str:
+    band = "moved beyond its give-or-take" if moved else "within its give-or-take"
+    return (f"   {label:8s}{name:22.22}{base_m[0] * 100:4.0f}% -> {latest_m[0] * 100:4.0f}%"
+            f"   ({_pts(latest_m[0] - base_m[0])})   {band}")
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(
+        prog="wine_geo.verify",
+        description="Did an intervention move a brand's share-of-voice? "
+                    "Difference-of-changes vs. an untouched control (#23 Phase 2).",
+    )
+    ap.add_argument("root", help="dir of daily partitions (each holds <date>/metrics.jsonl)")
+    ap.add_argument("brand", help="the treated brand — the one you intervened on")
+    ap.add_argument("--control", required=True,
+                    help="an untouched comparison brand; it absorbs shocks that hit both")
+    ap.add_argument("--prompt", default="p0")
+    ap.add_argument("--base", help="baseline date (default: first partition)")
+    ap.add_argument("--latest", help="after date (default: last partition)")
+    ap.add_argument("--lever", help="what you changed, printed in the report header")
+    args = ap.parse_args(argv)
+
+    try:
+        pv = verify_from_partitions(args.root, args.brand, args.control,
+                                    prompt_id=args.prompt, base=args.base, latest=args.latest)
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return 1
+
+    print(f"# Intervention check: {args.brand}  (prompt {args.prompt}, {pv.base} -> {pv.latest})")
+    if args.lever:
+        print(f"  lever: {args.lever}")
+    print()
+    if not pv.treated_seen:
+        print(f"   ! '{args.brand}' never appears in these partitions — reads as 0% throughout")
+    if not pv.control_seen:
+        print(f"   ! control '{args.control}' never appears — a control stuck at 0 can't "
+              f"absorb a category-wide shock, so CONFOUNDED can't be ruled out")
+    r = pv.result
+    print(_fmt_move("treated", args.brand, pv.treated_base, pv.treated_latest, r.treated_moved))
+    print(_fmt_move("control", args.control, pv.control_base, pv.control_latest, r.control_moved))
+    print()
+    print(f"   difference of the changes: {_pts(r.diff_of_changes)}, "
+          f"give-or-take {r.give_or_take * 100:.0f} pts")
+    print()
+    print("## Verdict")
+    print(f"   {r.verdict}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
