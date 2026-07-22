@@ -168,6 +168,29 @@ into the wobble on the difference, and stays honest — a +6-point move that's i
 give-or-take reads **NO DETECTABLE EFFECT**, not a win. Defaults to first-vs-last partition; pin
 `--base`/`--latest` for an exact before/after window.
 
+## The lever you *can't* move on the web: knowledge, across model generations
+
+`verify` covers the retrieval/ranking levers — things you change this week. The **knowledge**
+lever is different in kind: you can't make a model *know* a brand by editing a page. It only
+closes when the vendor retrains and ships a newer generation whose reliable cutoff spans the
+brand's documentation date. So this axis isn't time — it's **model generation, ordered by
+cutoff** — and it separates the two sub-causes of a knowledge gap, which need opposite fixes:
+*too new* (wait for the next generation) vs. *too obscure* (get documented; retraining won't
+help). It's predict-then-measure: the cutoff table sets the prior, the anchor-verified probe is
+the truth.
+
+```bash
+python -m wine_geo.generation "Atelier Ilaria" --provider openai \
+    --models gpt-4o-mini gpt-4.1-mini gpt-5-mini --control Caymus
+# → GAP CLOSED / TOO NEW / TOO OBSCURE / MADE UP
+```
+
+Runs one vendor's fleet (so only the cutoff changes across the axis, not the vendor), probes each
+model, and flags the generation where the brand flips *disowns → knows* — checking it against the
+generation whose cutoff first crosses the documentation date. `--control` runs a long-known brand
+that must read *knows* everywhere, or the probe is miscalibrated. `--priors-only` is a free,
+predict-only pass. Brand facts (`since`, `anchors`) are read from `producers.json`.
+
 ## Run it as a Dagster DAG
 
 The same stages, wrapped as a **daily-partitioned** asset graph
