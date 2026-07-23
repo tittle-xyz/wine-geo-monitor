@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.6.0...wine-geo-monitor-v0.7.0) (2026-07-23)
+
+
+### Features
+
+* [#23](https://github.com/tittle-xyz/wine-geo-monitor/issues/23) Phase 2 — recommend, verify, and the knowledge-lever axis ([#53](https://github.com/tittle-xyz/wine-geo-monitor/issues/53)) ([09a0ba8](https://github.com/tittle-xyz/wine-geo-monitor/commit/09a0ba82e470262df2c557dbdb748fe289a57830))
+* diagnose why a brand's share-of-voice is what it is ([#23](https://github.com/tittle-xyz/wine-geo-monitor/issues/23)) ([#51](https://github.com/tittle-xyz/wine-geo-monitor/issues/51)) ([3a64ed2](https://github.com/tittle-xyz/wine-geo-monitor/commit/3a64ed2c93f18a85c1f324af17fc8d0076e8e432))
+
 ## [0.6.0](https://github.com/tittle-xyz/wine-geo-monitor/compare/wine-geo-monitor-v0.5.2...wine-geo-monitor-v0.6.0) (2026-07-15)
 
 
