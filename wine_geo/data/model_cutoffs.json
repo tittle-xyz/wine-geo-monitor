@@ -12,9 +12,9 @@
       "source": "OpenAI GPT-4.1 model card — June 2024 knowledge cutoff (mid-2024 point on the OpenAI generation axis, #23 Phase 2)"
     },
     "gpt-5-mini": {
-      "reliable_cutoff": "2024-10",
-      "training_cutoff": "2024-10",
-      "source": "OpenAI GPT-5 family, cheap tier; reliable cutoff ~late 2024 is an ESTIMATE — confirm via the probe's self-report (as gpt-4o-mini did). Prior only; measurement is ground truth."
+      "reliable_cutoff": "2024-06",
+      "training_cutoff": "2024-06",
+      "source": "OpenAI GPT-5 family, cheap tier; model SELF-REPORTED 'cutoff June 2024' in the live probe (was estimated ~late 2024). Ties gpt-4.1-mini — so today's OpenAI fleet has only two distinct cutoffs, Oct-2023 and Jun-2024."
     },
     "claude-haiku-4-5": {
       "reliable_cutoff": "2025-02",

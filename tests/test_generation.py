@@ -62,14 +62,41 @@ class TestGrade:
         v = grade_trajectory(traj, 2023)
         assert v.verdict == "TOO OBSCURE"
 
-    def test_made_up_takes_precedence_over_too_obscure(self):
-        # newest confabulates AND cutoff >= since — the made-up verdict must win.
+    def test_too_new_uses_month_precision(self):
+        # A Fall-2024 brand vs a Jun-2024 newest cutoff: same YEAR, but the brand is later.
+        # Year-only comparison would wrongly say TOO OBSCURE; month precision says TOO NEW.
         traj = [
             _mk("gpt-4o-mini", "2023-10", "disowns"),
-            _mk("gpt-5-mini", "2024-10", "confabulates"),
+            _mk("gpt-5-mini", "2024-06", "disowns"),
         ]
+        v = grade_trajectory(traj, "2024-11")
+        assert v.verdict == "TOO NEW"
+
+    def test_borderline_when_same_year_but_only_year_precision(self):
+        # since is year-only and equal to the newest cutoff's year -> genuinely undecidable.
+        traj = [_mk("gpt-5-mini", "2024-06", "disowns")]
         v = grade_trajectory(traj, 2024)
+        assert v.verdict == "BORDERLINE"
+
+    def test_made_up_only_when_model_could_have_learned_it(self):
+        # docs (2020) predate the newest cutoff (2024): the model had the data, yet it confabulates.
+        traj = [
+            _mk("gpt-4o-mini", "2023-10", "disowns"),
+            _mk("gpt-5-mini", "2024-06", "confabulates"),
+        ]
+        v = grade_trajectory(traj, 2020)
         assert v.verdict == "MADE UP"
+
+    def test_confabulation_does_not_shadow_too_new(self):
+        # newest confabulates, but the brand postdates its cutoff -> TOO NEW headline + a caveat,
+        # not MADE UP (the model never had the data, so the confabulation isn't the real cause).
+        traj = [
+            _mk("gpt-4o-mini", "2023-10", "disowns"),
+            _mk("gpt-5-mini", "2024-06", "confabulates"),
+        ]
+        v = grade_trajectory(traj, "2024-11")
+        assert v.verdict == "TOO NEW"
+        assert "invents confident" in v.detail
 
     def test_early_flip_is_flagged(self):
         # a "known" flip earlier than the documentation date is suspicious — surface it.

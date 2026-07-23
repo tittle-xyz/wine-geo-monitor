@@ -57,6 +57,25 @@ def _plurality(tally):
     return tally.most_common(1)[0][0] if tally else None
 
 
+def _doc_vs_cutoff(since, cutoff):
+    """Is the brand's documentation date "after" / "before" / "same-year" as a model's cutoff?
+
+    Both sides may be month-precise ("2024-11", "2024-06") or year-only ("2024"). When both carry
+    a month, compare at month precision; within a shared year but only year precision we genuinely
+    can't tell, so return "same-year" and let the caller flag it rather than guess. None if either
+    date is missing/unparseable.
+    """
+    if since is None or not cutoff:
+        return None
+    s, c = str(since), str(cutoff)
+    if len(s) >= 7 and len(c) >= 7:                 # both YYYY-MM -> lexicographic order works
+        return "after" if s > c else "before" if s < c else "same-year"
+    sy, cy = _year(s), _year(c)
+    if sy is None or cy is None:
+        return None
+    return "after" if sy > cy else "before" if sy < cy else "same-year"
+
+
 def knowledge_trajectory(brand, since, model_ids, cutoffs, *, provider=None, anchors=(), n=5):
     """Per model, ordered by reliable cutoff ascending: the predicted prior, and — when a provider
     is given — the measured, anchor-verified knowledge verdict. `provider=None` is the free,
@@ -110,23 +129,42 @@ def grade_trajectory(traj, since) -> GenerationVerdict:
             f"flipped disown→knows at {first_known.model} (cutoff {first_known.cutoff}), {why}. "
             "The knowledge gap closed because the generation caught up — no web change could.")
 
-    if newest.verdict == "confabulates":
-        return GenerationVerdict(
-            "MADE UP", None,
-            f"the newest model ({newest.model}) recognizes the name but fails every anchor fact — "
-            "confident hallucination, not knowledge. Treat as NOT KNOWN.")
+    # No model truly knows it. The date relationship is the primary cause; a newest-model
+    # confabulation is only the headline (MADE UP) when the model *could* have learned the brand
+    # (its cutoff spans the docs). Otherwise it's a caveat on the real, date-driven verdict.
+    rel = _doc_vs_cutoff(since, newest.cutoff)
+    made_up = newest.verdict == "confabulates"
+    caveat = ("" if not made_up else
+              f" And the newest model ({newest.model}) invents confident details rather than "
+              "admitting it doesn't know the brand — a reputational risk of its own.")
 
-    if since_year is not None and (newest.cutoff_year or 0) >= since_year:
+    if rel == "before":
+        # the newest cutoff already spans the documentation — the model had the chance to learn it.
+        if made_up:
+            return GenerationVerdict(
+                "MADE UP", None,
+                f"the {since} docs predate the newest model's cutoff ({newest.cutoff}), so it had "
+                "the data — yet it recognizes the name and fails every anchor fact. Confident "
+                "hallucination, not knowledge; treat as NOT KNOWN.")
         return GenerationVerdict(
             "TOO OBSCURE", None,
             f"the newest model's cutoff ({newest.cutoff}) already spans the {since} documentation, "
             f"yet it still {newest.verdict} the brand — retraining won't fix this. "
             "The lever is coverage/prominence, not time.")
 
+    if rel == "same-year":
+        return GenerationVerdict(
+            "BORDERLINE", None,
+            f"the newest model ({newest.model}, cutoff {newest.cutoff}) and the {since} docs share "
+            "a year — can't separate too-new from too-obscure without a month-precise --since."
+            + caveat)
+
+    # rel == "after" (documentation postdates the newest cutoff), or no usable date to compare.
     return GenerationVerdict(
         "TOO NEW", None,
-        f"even the newest model ({newest.model}, cutoff {newest.cutoff}) predates the {since} "
-        "documentation — too new for any available generation. Re-run when a newer model ships.")
+        f"the {since} documentation postdates even the newest model ({newest.model}, cutoff "
+        f"{newest.cutoff}) — too new for any generation. Re-run when a newer model ships."
+        + caveat)
 
 
 def _defaults_from_producer(brand, producers_path):

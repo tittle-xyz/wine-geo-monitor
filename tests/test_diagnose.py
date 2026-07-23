@@ -41,6 +41,16 @@ class TestClassifyProbe:
     def test_disown_with_no_anchor_is_disowns(self):
         assert classify_probe("I'm not familiar with that producer.", self.ANCHORS) == "disowns"
 
+    def test_polite_disown_phrasings_are_disowns(self):
+        # A live gpt-5-mini run leaked these honest disowns through as "confabulates" because the
+        # marker list missed the contracted / "confirm" phrasings. Lock the fix in.
+        for txt in (
+            "I don't recognize a wine producer called that from my training data.",
+            "I can't confirm its existence or give firm details about who's behind it.",
+            "That name didn't appear in the sources I was trained on.",
+        ):
+            assert classify_probe(txt, self.ANCHORS) == "disowns", txt
+
     def test_accurate_anchor_is_knows(self):
         txt = "Founded by Cameron Hughes as a négoce project."
         assert classify_probe(txt, self.ANCHORS) == "knows"
