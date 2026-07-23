@@ -10,6 +10,7 @@ from wine_geo.diagnose import (
     diagnose,
     diagnose_retrieval,
     knowledge_prior,
+    recommend,
 )
 
 CUTOFFS = {
@@ -39,6 +40,16 @@ class TestClassifyProbe:
 
     def test_disown_with_no_anchor_is_disowns(self):
         assert classify_probe("I'm not familiar with that producer.", self.ANCHORS) == "disowns"
+
+    def test_polite_disown_phrasings_are_disowns(self):
+        # A live gpt-5-mini run leaked these honest disowns through as "confabulates" because the
+        # marker list missed the contracted / "confirm" phrasings. Lock the fix in.
+        for txt in (
+            "I don't recognize a wine producer called that from my training data.",
+            "I can't confirm its existence or give firm details about who's behind it.",
+            "That name didn't appear in the sources I was trained on.",
+        ):
+            assert classify_probe(txt, self.ANCHORS) == "disowns", txt
 
     def test_accurate_anchor_is_knows(self):
         txt = "Founded by Cameron Hughes as a négoce project."
@@ -108,3 +119,36 @@ class TestDiagnoseRetrieval:
     def test_retrieved_and_recommended(self):
         assert diagnose_retrieval(retrieved_rate=0.8, recommended_rate=0.5).startswith(
             "RETRIEVED & RECOMMENDED")
+
+
+class TestRecommend:
+    def _retr(self, retrieved, recommended, sources=()):
+        return {"retrieved_rate": retrieved, "recommended_rate": recommended,
+                "sample_sources": list(sources)}
+
+    def test_not_retrieved_names_target_sources(self):
+        # CAM X shape: not known, not retrieved -> a not-retrieved lever citing the real targets.
+        srcs = [_src("https://www.winedeals.com/x"), _src("https://totalwine.com/y")]
+        recs = recommend(known=False, ranked_rate=0.0, retrieval=self._retr(0.0, 0.0, srcs))
+        by_cause = {r.cause: r for r in recs}
+        assert "not-retrieved" in by_cause and "not-known" in by_cause
+        assert "winedeals.com" in by_cause["not-retrieved"].detail
+        assert "totalwine.com" in by_cause["not-retrieved"].detail
+        assert by_cause["not-retrieved"].timescale == "weeks"
+
+    def test_retrieved_but_not_ranked(self):
+        recs = recommend(known=True, ranked_rate=0.0, retrieval=self._retr(0.8, 0.0))
+        assert any(r.cause == "not-ranked" for r in recs)
+
+    def test_parametric_ranking_gap_without_grounding(self):
+        # known but not surfaced and no grounded probe -> a ranking lever, hedged to confirm.
+        recs = recommend(known=True, ranked_rate=0.0, retrieval=None)
+        assert any(r.cause == "not-ranked" for r in recs)
+
+    def test_no_probe_no_retrieval_is_inconclusive(self):
+        recs = recommend(known=None, ranked_rate=0.0, retrieval=None)
+        assert any(r.cause == "inconclusive" for r in recs)
+
+    def test_known_and_ranked_is_maintain(self):
+        recs = recommend(known=True, ranked_rate=0.5, retrieval=None)
+        assert [r.cause for r in recs] == ["none"]

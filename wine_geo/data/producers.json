@@ -34,5 +34,6 @@
 
   { "name": "De Negoce", "aliases": ["DeNegoce", "De Négoce"], "note": "négociant hidden-label (independent company)" },
   { "name": "CAM X", "aliases": ["CAMx", "CamX", "CAMX", "CAM-X", "Cam X"], "note": "négociant hidden-label (Cameron Hughes, launched 2025)" },
-  { "name": "Cameron Hughes", "aliases": ["Cameron Hughes Wine", "Cam Hughes"], "note": "négociant hidden-label (the négociant behind CAM X; formerly de Négoce, now a separate company)" }
+  { "name": "Cameron Hughes", "aliases": ["Cameron Hughes Wine", "Cam Hughes"], "note": "négociant hidden-label (the négociant behind CAM X; formerly de Négoce, now a separate company)" },
+  {"name": "Atelier Ilaria", "aliases": ["Atelier Ilaria Wines"], "note": "new 2024 Napa/Sonoma producer (value, small-lot) — #23 knowledge-lever test brand", "since": "2024-11", "anchors": ["Monticelli", "Napa", "Sonoma"]}
 ]

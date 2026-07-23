@@ -123,6 +123,8 @@ PRICING: dict[str, tuple[float, float]] = {
     "claude-sonnet-5": (3.0, 15.0),
     "claude-opus-4-8": (5.0, 25.0),
     "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-5-mini": (0.25, 2.00),   # GPT-5 mini tier; estimate — confirm on the pricing page
     "gpt-4o": (2.50, 10.0),
     "mock": (0.0, 0.0),
 }
@@ -133,6 +135,9 @@ BATCH_DISCOUNT = 0.5
 
 # Answers come back in ~400 tokens; keep sync and batch paths on the same ceiling.
 MAX_TOKENS = 400
+# gpt-5 / o-series reasoning models spend hidden reasoning tokens before the visible answer,
+# so their completion budget needs headroom above the terse ceiling or the answer comes back empty.
+REASONING_MAX_TOKENS = 2000
 
 # Web search is a paid, separately-billed server tool. The basic variant works on Haiku;
 # newer models can use web_search_20260209 (dynamic filtering), but the basic one returns
@@ -440,6 +445,18 @@ class AnthropicProvider:
         return out
 
 
+def _openai_token_budget(model: str) -> dict:
+    """The output-budget kwargs for an OpenAI chat completion, keyed by model family.
+
+    gpt-5 / o-series reasoning models reject `max_tokens` (they take `max_completion_tokens`) and
+    burn hidden reasoning tokens before the visible answer, so they need more headroom. Pure and
+    isolated so the branch a live run had to correct stays regression-tested without a network call.
+    """
+    if model.startswith(("gpt-5", "o1", "o3", "o4")):
+        return {"max_completion_tokens": REASONING_MAX_TOKENS}
+    return {"max_tokens": MAX_TOKENS}
+
+
 class OpenAIProvider:
     name = "openai"
     supports_batch = True
@@ -455,8 +472,8 @@ class OpenAIProvider:
     def complete(self, prompt: str, *, model: str) -> Completion:
         resp = self._client.chat.completions.create(
             model=model,
-            max_tokens=MAX_TOKENS,
             messages=[{"role": "user", "content": prompt}],
+            **_openai_token_budget(model),
         )
         text = resp.choices[0].message.content or ""
         usage = resp.usage

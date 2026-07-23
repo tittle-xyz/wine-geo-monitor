@@ -11,11 +11,22 @@ import json
 
 from wine_geo.providers import (
     MAX_TOKENS,
+    REASONING_MAX_TOKENS,
     Completion,
     OllamaProvider,
+    _openai_token_budget,
     estimate_cost,
     get_provider,
 )
+
+
+def test_openai_token_budget_routes_reasoning_models():
+    # A live run 400'd on gpt-5-mini because it rejects `max_tokens`; reasoning models must get
+    # `max_completion_tokens`, standard chat models keep `max_tokens`. Guard the branch.
+    for m in ("gpt-5-mini", "gpt-5", "o1", "o3-mini", "o4-mini"):
+        assert _openai_token_budget(m) == {"max_completion_tokens": REASONING_MAX_TOKENS}, m
+    for m in ("gpt-4o-mini", "gpt-4.1-mini", "gpt-4o"):
+        assert _openai_token_budget(m) == {"max_tokens": MAX_TOKENS}, m
 
 
 class _FakeResponse:

@@ -148,6 +148,49 @@ python -m wine_geo.trend out/daily --prompt p0 --chart out/trend.png
 One line per producer; a ⚠ marks a move past the noise floor. Backfill a range of
 partitions to exercise it, or let the daily schedule fill them in.
 
+## Did the intervention work?
+
+Trend tells you a brand *moved*; it can't tell you *your change* moved it. Share drifts on
+its own — the model updates, the category shifts, it's sampling noise. So after you act on a
+`diagnose` recommendation (get a brand into the listicles the retriever pulls, say), check it
+against an **untouched control brand**: the control absorbs whatever hit both, and the leftover
+— how much *more* the treated brand changed — is what's specific to your intervention
+(difference-in-differences, over the same daily partitions).
+
+```bash
+python -m wine_geo.verify out/daily "CAM X" --control "Cameron Hughes" \
+    --lever "added to 'best value Napa Cab' listicles"
+# → LIKELY REAL / CONFOUNDED / NO DETECTABLE EFFECT / SUGGESTIVE
+```
+
+The verdict is graded and in plain terms, not a p-value: it propagates the stored bootstrap CIs
+into the wobble on the difference, and stays honest — a +6-point move that's inside a ±18-point
+give-or-take reads **NO DETECTABLE EFFECT**, not a win. Defaults to first-vs-last partition; pin
+`--base`/`--latest` for an exact before/after window.
+
+## The lever you *can't* move on the web: knowledge, across model generations
+
+`verify` covers the retrieval/ranking levers — things you change this week. The **knowledge**
+lever is different in kind: you can't make a model *know* a brand by editing a page. It only
+closes when the vendor retrains and ships a newer generation whose reliable cutoff spans the
+brand's documentation date. So this axis isn't time — it's **model generation, ordered by
+cutoff** — and it separates the two sub-causes of a knowledge gap, which need opposite fixes:
+*too new* (wait for the next generation) vs. *too obscure* (get documented; retraining won't
+help). It's predict-then-measure: the cutoff table sets the prior, the anchor-verified probe is
+the truth.
+
+```bash
+python -m wine_geo.generation "Atelier Ilaria" --provider openai \
+    --models gpt-4o-mini gpt-4.1-mini gpt-5-mini --control Caymus
+# → GAP CLOSED / TOO NEW / TOO OBSCURE / MADE UP
+```
+
+Runs one vendor's fleet (so only the cutoff changes across the axis, not the vendor), probes each
+model, and flags the generation where the brand flips *disowns → knows* — checking it against the
+generation whose cutoff first crosses the documentation date. `--control` runs a long-known brand
+that must read *knows* everywhere, or the probe is miscalibrated. `--priors-only` is a free,
+predict-only pass. Brand facts (`since`, `anchors`) are read from `producers.json`.
+
 ## Run it as a Dagster DAG
 
 The same stages, wrapped as a **daily-partitioned** asset graph
